@@ -55,6 +55,14 @@ var DIRS = [['North','the wild horizon'],['North-east','the morning water'],['Ea
             ['South','the old mountain'],['South-west','the deep forest'],['West','the setting sun'],['North-west','the far headland']];
 var IDLE_MIN = 20000, IDLE_MAX = 45000;
 var PHOTO_MAX_EDGE = 700, PHOTO_QUALITY = 0.7;
+var HUNT_PUBLISH_MS = { close:10000, long:60000 };
+var HUNT_CUES = [
+  [0.05, 'EEK! The cat is at the door! Do not even breathe!'],
+  [0.15, 'A twig snaps. Very close. Hold everything.'],
+  [0.4,  'Something stirs nearby. The hunt is warm.'],
+  [1.0,  'Lanterns move in the distance. They are coming.'],
+  [Infinity, 'The island is quiet. For now.']
+];
 
 /* ================= STATE ================= */
 var sb = null;
@@ -65,8 +73,9 @@ var shared = {
   flag:{ raised:false, adventure:null, when:null, raisedBy:null, joining:[] },
   horizon:[], ideas:[], adventures:[], chronicle:[], shanty:[],
   chaos:{ deployed:false, deployedBy:null },
-  hideSeek:{ active:false }
+  hideSeek:{ active:false, soughtId:null, mode:'close', startedBy:null }
 };
+var positions = {};   /* member_id -> latest hs_positions row */
 var local = { settings:{ timeOverride:'auto' }, treasures:[], memberName:null };
 
 function loadLocal(){
@@ -257,10 +266,11 @@ async function fetchAdventures(){ var r = await sb.from('adventures').select('*'
 async function fetchChronicle(){ var r = await sb.from('chronicle').select('*').order('created_at'); if (r.data) shared.chronicle = r.data.map(function(c){ return { entry:c.entry, author:c.author, date:c.created_at }; }); }
 async function fetchShanty(){ var r = await sb.from('shanty_lines').select('*').order('earned_at'); if (r.data) shared.shanty = r.data.map(function(s){ return { line:s.line, author:s.author, date:s.earned_at }; }); }
 async function fetchChaos(){ var r = await sb.from('chaos_state').select('*').eq('id',1).single(); if (r.data) shared.chaos = { deployed:!!r.data.deployed, deployedBy:r.data.deployed_by }; }
-async function fetchHideSeek(){ var r = await sb.from('hide_seek').select('*').eq('id',1).single(); if (r.data) shared.hideSeek = { active:!!r.data.active, startedAt:r.data.started_at }; }
+async function fetchHideSeek(){ var r = await sb.from('hide_seek').select('*').eq('id',1).single(); if (r.data) shared.hideSeek = { active:!!r.data.active, soughtId:r.data.sought_member_id, mode:r.data.mode || 'close', startedBy:r.data.started_by, startedAt:r.data.started_at }; }
+async function fetchPositions(){ var r = await sb.from('hs_positions').select('*'); if (r.data){ positions = {}; r.data.forEach(function(p){ positions[p.member_id] = p; }); } }
 async function refreshShared(){
-  await Promise.all([fetchFlag(), fetchHorizon(), fetchIdeas(), fetchAdventures(), fetchChronicle(), fetchShanty(), fetchChaos(), fetchHideSeek()]);
-  cacheSave(); reflectScene(); reflectLantern();
+  await Promise.all([fetchFlag(), fetchHorizon(), fetchIdeas(), fetchAdventures(), fetchChronicle(), fetchShanty(), fetchChaos(), fetchHideSeek(), fetchPositions()]);
+  cacheSave(); reflectScene(); reflectLantern(); geoSync();
 }
 function subscribe(){
   sb.channel('island')
@@ -277,8 +287,16 @@ function subscribe(){
       if (shared.chaos.deployed && !was && shared.chaos.deployedBy !== myName()) proclaim('Chaos Is Loose');
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'hide_seek' }, function(p){
-      shared.hideSeek = { active:!!p.new.active, startedAt:p.new.started_at };
-      cacheSave(); reflectLantern();
+      var was = shared.hideSeek.active;
+      shared.hideSeek = { active:!!p.new.active, soughtId:p.new.sought_member_id, mode:p.new.mode || 'close', startedBy:p.new.started_by, startedAt:p.new.started_at };
+      cacheSave(); reflectLantern(); geoSync();
+      if (shared.hideSeek.active && !was) proclaim('The Hunt Is On');
+      if (!shared.hideSeek.active && was){ positions = {}; proclaim('The Lantern Is Doused'); }
+      renderHuntIfOpen();
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'hs_positions' }, function(p){
+      if (p.new && p.new.member_id) positions[p.new.member_id] = p.new;
+      renderHuntIfOpen();
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'horizon' }, function(){ fetchHorizon().then(function(){ cacheSave(); reflectScene(); }); })
     .on('postgres_changes', { event:'*', schema:'public', table:'ideas' }, function(){ fetchIdeas().then(cacheSave); })
@@ -805,13 +823,143 @@ function openCrew(){
   openV('vCrew');
 }
 
-/* ================= HIDE & SEEK ================= */
-async function toggleLantern(){
-  shared.hideSeek.active = !shared.hideSeek.active;
-  reflectLantern();
-  if (online){
-    var r = await sb.from('hide_seek').update({ active:shared.hideSeek.active, started_at:shared.hideSeek.active ? new Date().toISOString() : null }).eq('id', 1);
-    if (r.error) toast('The lantern guttered: ' + r.error.message);
+/* ================= GIANT HIDE & SEEK ================= */
+var geoWatchId = null, lastPub = 0;
+function geoSync(){
+  var participating = online && shared.hideSeek.active && me.id;
+  if (participating && geoWatchId === null && navigator.geolocation && window.isSecureContext){
+    geoWatchId = navigator.geolocation.watchPosition(function(pos){
+      var now = Date.now();
+      var interval = HUNT_PUBLISH_MS[shared.hideSeek.mode] || 10000;
+      if (now - lastPub < interval) return;
+      lastPub = now;
+      sb.from('hs_positions').upsert({ member_id:me.id, lat:pos.coords.latitude, lng:pos.coords.longitude,
+        accuracy:pos.coords.accuracy, updated_at:new Date().toISOString() }).then(function(){});
+    }, function(){}, { enableHighAccuracy: shared.hideSeek.mode === 'close', maximumAge:5000 });
+  }
+  if (!participating && geoWatchId !== null && navigator.geolocation){
+    navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null;
+  }
+}
+function haversineKm(a, b){
+  var R = 6371, toR = Math.PI / 180;
+  var dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+  var s = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(a.lat*toR) * Math.cos(b.lat*toR) * Math.sin(dLng/2) * Math.sin(dLng/2);
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+function bearingDeg(a, b){
+  var toR = Math.PI / 180;
+  var y = Math.sin((b.lng - a.lng) * toR) * Math.cos(b.lat * toR);
+  var x = Math.cos(a.lat*toR) * Math.sin(b.lat*toR) - Math.sin(a.lat*toR) * Math.cos(b.lat*toR) * Math.cos((b.lng - a.lng) * toR);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+function compassWord(d){
+  var w = ['north','north-east','east','south-east','south','south-west','west','north-west'];
+  return w[Math.round(d / 45) % 8];
+}
+function fmtDist(km){ return km < 1 ? Math.round(km*1000) + ' m' : (km < 10 ? km.toFixed(1) + ' km' : Math.round(km) + ' km'); }
+function cueFor(km){
+  for (var i = 0; i < HUNT_CUES.length; i++){ if (km <= HUNT_CUES[i][0]) return HUNT_CUES[i][1]; }
+  return HUNT_CUES[HUNT_CUES.length - 1][1];
+}
+function renderHuntIfOpen(){ var v = $('vHunt'); if (v && v.classList.contains('open')) renderHunt(); }
+function openHunt(){ renderHunt(); openV('vHunt'); }
+function renderHunt(){
+  var b = body('vHunt');
+  if (!shared.hideSeek.active){
+    b.innerHTML = '<p style="font-size:14.5px;">Light the lantern and the island begins to watch. Who goes to ground?</p><div id="huntWho"></div>' +
+      '<p style="font-size:13.5px; color:#7a5a32; margin:10px 0 4px;">What kind of hunt?</p><div id="huntMode">' +
+      '<span class="whenChip sel" data-m="close">A close hunt (garden, park, bush)</span>' +
+      '<span class="whenChip" data-m="long">A long chase (roads and rivers)</span></div>' +
+      '<button class="wbtn" id="huntGo" style="margin-top:12px;">Light the lantern</button>' +
+      (!window.isSecureContext ? '<div class="notice">This shore cannot sense positions; the deployed island carries the tracking magic. The lantern still lights everywhere.</div>' : '');
+    var who = null, mode = 'close';
+    var ww = $('huntWho');
+    members.forEach(function(m){
+      var btn = document.createElement('button');
+      btn.className = 'pickChip'; btn.textContent = m.name;
+      btn.onclick = function(){
+        who = m;
+        ww.querySelectorAll('.pickChip').forEach(function(x){ x.className = 'pickChip'; });
+        btn.className = 'pickChip sel';
+      };
+      ww.appendChild(btn);
+    });
+    $('huntMode').querySelectorAll('.whenChip').forEach(function(ch){
+      ch.onclick = function(){
+        mode = ch.getAttribute('data-m');
+        $('huntMode').querySelectorAll('.whenChip').forEach(function(x){ x.classList.remove('sel'); });
+        ch.classList.add('sel');
+      };
+    });
+    $('huntGo').onclick = async function(){
+      if (!who) return;
+      if (!online) return toast('The hunt needs the island connected.');
+      var r = await sb.from('hide_seek').update({ active:true, sought_member_id:who.id, mode:mode,
+        started_by:myName(), started_at:new Date().toISOString() }).eq('id', 1);
+      if (r.error) return toast('The lantern guttered: ' + r.error.message);
+      shared.hideSeek = { active:true, soughtId:who.id, mode:mode, startedBy:myName() };
+      reflectLantern(); geoSync(); renderHunt();
+    };
+  } else {
+    var sought = members.filter(function(m){ return m.id === shared.hideSeek.soughtId; })[0];
+    var soughtName = sought ? sought.name : 'someone';
+    var iAmSought = me.id && shared.hideSeek.soughtId === me.id;
+    var html = '<p style="font-size:12.5px; letter-spacing:.14em; text-transform:uppercase; color:#7a5a32;">' +
+      (shared.hideSeek.mode === 'long' ? 'A long chase' : 'A close hunt') + ' &middot; lit by ' + esc(shared.hideSeek.startedBy || '') + '</p>';
+    if (iAmSought){
+      var nearest = null, myPos = positions[me.id];
+      members.forEach(function(m){
+        if (m.id === me.id) return;
+        var p = positions[m.id];
+        if (p && myPos && p.lat != null && myPos.lat != null){
+          var d = haversineKm({ lat:myPos.lat, lng:myPos.lng }, { lat:p.lat, lng:p.lng });
+          if (nearest === null || d < nearest) nearest = d;
+        }
+      });
+      html += '<p style="margin:12px 0 4px; font-size:15px;">You are the Sought, ' + esc(myName()) + '. Stay hidden.</p>' +
+        '<div class="notice' + (nearest !== null && nearest < 0.15 ? ' eekPulse' : '') + '" style="font-size:16px;">' +
+        esc(nearest === null ? 'The island is quiet. For now.' : cueFor(nearest)) + '</div>' +
+        (nearest !== null ? '<p style="font-size:12.5px; color:#8a765a; font-style:italic;">Nearest hunter: ' + fmtDist(nearest) + '</p>' : '') +
+        '<button class="wbtn ghost" id="huntCaught" style="margin-top:10px;">They found me</button>';
+    } else {
+      var sp = shared.hideSeek.soughtId ? positions[shared.hideSeek.soughtId] : null;
+      var mp = me.id ? positions[me.id] : null;
+      html += '<p style="margin:10px 0 4px; font-size:15px;">' + esc(soughtName) + ' has gone to ground.</p>';
+      if (sp && mp && sp.lat != null && mp.lat != null){
+        var km = haversineKm({ lat:mp.lat, lng:mp.lng }, { lat:sp.lat, lng:sp.lng });
+        var brg = bearingDeg({ lat:mp.lat, lng:mp.lng }, { lat:sp.lat, lng:sp.lng });
+        html += '<div id="roseWrap"><svg width="150" height="150" viewBox="0 0 120 120">' +
+          '<circle cx="60" cy="60" r="56" fill="#1e2b45" stroke="#c9a86a" stroke-width="2.5"/>' +
+          '<text x="60" y="16" fill="#e8d9b5" font-size="11" text-anchor="middle">N</text>' +
+          '<polygon points="60,22 65,60 60,74 55,60" fill="#e05a4e" stroke="#e8d9b5" stroke-width=".8" transform="rotate(' + Math.round(brg) + ' 60 60)"/>' +
+          '</svg></div>' +
+          '<p style="text-align:center; font-size:17px;">' + fmtDist(km) + ' to the ' + compassWord(brg) + '</p>' +
+          '<p class="sub" style="text-align:center;">The needle points from north. Face north and follow it.</p>';
+      } else {
+        html += '<div class="notice">' + (window.isSecureContext
+          ? 'The island is listening for positions&hellip; move about and give it a moment.'
+          : 'This shore cannot sense positions; the deployed island carries the tracking magic. Hunt by wit for now.') + '</div>';
+      }
+      html += '<button class="wbtn" id="huntFound" style="margin-top:10px;">Found them!</button>';
+    }
+    html += '<button class="wbtn ghost" id="huntDouse" style="margin-top:10px;">Douse the lantern</button>';
+    b.innerHTML = html;
+    async function endHunt(foundBy){
+      if (!online) return toast('The lantern needs the island connected.');
+      var jobs = [ sb.from('hide_seek').update({ active:false, sought_member_id:null, started_by:null }).eq('id', 1) ];
+      if (foundBy) jobs.push(sb.from('chronicle').insert({
+        entry:'Giant Hide & Seek: ' + soughtName + ' was found. The lantern goes dark.', author:foundBy }));
+      jobs.push(sb.from('hs_positions').delete().not('member_id', 'is', null));
+      await Promise.all(jobs);
+      shared.hideSeek = { active:false, soughtId:null, mode:'close', startedBy:null };
+      positions = {};
+      reflectLantern(); geoSync(); renderHunt();
+    }
+    if ($('huntFound')) $('huntFound').onclick = function(){ endHunt(myName()); };
+    if ($('huntCaught')) $('huntCaught').onclick = function(){ endHunt(myName()); };
+    if ($('huntDouse')) $('huntDouse').onclick = function(){ endHunt(null); };
   }
 }
 
@@ -878,7 +1026,7 @@ async function init(){
   bindHotspot('hs-call', openCall);
   bindHotspot('hs-crew', openCrew);
   bindHotspot('hs-settings', openSettings);
-  bindHotspot('hs-lantern', toggleLantern);
+  bindHotspot('hs-lantern', openHunt);
   bindHotspot('hs-idea', openIdeas);
   $('hs-rollo').addEventListener('click', function(){ if (!wasDrag()) rolloBark(); });
   document.querySelectorAll('.veil .closeX').forEach(function(x){

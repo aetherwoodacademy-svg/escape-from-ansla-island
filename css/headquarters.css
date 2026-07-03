@@ -100,6 +100,10 @@
     box-shadow:0 0 14px rgba(230,190,90,.55); animation:crownPulse .5s ease; }
   @keyframes crownPulse { 0%{transform:scale(.85);} 60%{transform:scale(1.08);} 100%{transform:scale(1);} }
 
+  /* the sought's tension cue */
+  .eekPulse { animation:eek .55s ease-in-out infinite; border-left-color:#a33320 !important; }
+  @keyframes eek { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.035);} }
+
   /* developing polaroid */
   .devWrap { display:flex; justify-content:center; margin:10px 0; }
   .devPol { background:#f6efdc; border:1px solid #b9a67d; padding:10px 10px 14px; box-shadow:0 5px 16px rgba(0,0,0,.4);
