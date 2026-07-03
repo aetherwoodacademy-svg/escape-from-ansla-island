@@ -41,7 +41,7 @@
     padding:.3em .7em; border-radius:3px; letter-spacing:.04em; }
 
   /* live adventure card written onto the blank noticeboard parchment */
-  #boardLive { position:absolute; left:40.2%; top:19.5%; width:20.4%; height:22%; pointer-events:none;
+  #boardLive { position:absolute; left:41.2%; top:19.5%; width:20.4%; height:22%; pointer-events:none;
     background:transparent; border:none; border-radius:3px; transform:rotate(.6deg);
     padding:2.5% 2.5%; color:#3a2812;
     display:flex; flex-direction:column; justify-content:center; gap:3%; }
@@ -53,7 +53,7 @@
   #boardLive.hasArt #blTitle { color:#ffe9b0; text-shadow:0 2px 8px rgba(0,0,0,.85); }
   #boardLive.hasArt #blBody { color:#f6ead0; text-shadow:0 1px 6px rgba(0,0,0,.85); }
   #boardLive.hasArt #blBody small { color:#e8cf9e; }
-  #chestLive { position:absolute; left:69.5%; top:62.8%; width:14.8%; height:10.8%; pointer-events:none; overflow:hidden; }
+  #chestLive { position:absolute; left:71.5%; top:58%; width:14.8%; height:10.8%; pointer-events:none; overflow:hidden; }
   #chestLive .mini { position:absolute; width:32%; background:#f6efdc; border:1px solid #b9a67d;
     padding:2% 2% 6%; box-shadow:0 4px 9px rgba(20,10,4,.65); bottom:-16%; }
   #chestLive .mini img { width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; display:block; }
