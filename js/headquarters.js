@@ -69,16 +69,17 @@ var members = [];
 var me = { id:null, name:null, role:null };
 var shared = {
   flag:{ raised:false, adventure:null, when:null, raisedBy:null, joining:[] },
-  horizon:[], ideas:[], adventures:[], chronicle:[], shanty:[],
+  horizon:[], ideas:[], adventures:[], chronicle:[], shanty:[], treasures:[],
   chaos:{ deployed:false, deployedBy:null },
   hideSeek:{ active:false, soughtId:null, mode:'close', startedBy:null }
 };
 var positions = {};   /* member_id -> latest hs_positions row */
-var local = { settings:{ timeOverride:'auto' }, treasures:[], memberName:null };
+var local = { settings:{ timeOverride:'auto' }, treasures:[], memberName:null, migrated:false };
 
 function loadLocal(){
   try { var raw = localStorage.getItem(LOCAL_KEY); if (raw){ var l = JSON.parse(raw);
-    local.settings = l.settings || local.settings; local.treasures = l.treasures || []; local.memberName = l.memberName || null; } }
+    local.settings = l.settings || local.settings; local.treasures = l.treasures || [];
+    local.memberName = l.memberName || null; local.migrated = !!l.migrated; } }
   catch(e){}
 }
 function saveLocal(){
@@ -220,9 +221,10 @@ function reflectScene(){
   var cl = $('chestLive');
   if (cl){
     cl.innerHTML = '';
-    local.treasures.slice(-3).reverse().forEach(function(tr){
+    shared.treasures.slice(-3).reverse().forEach(function(tr){
+      if (!tr.url) return;
       var d = document.createElement('div'); d.className = 'mini';
-      var im = document.createElement('img'); im.alt = ''; im.src = tr.imageRef;
+      var im = document.createElement('img'); im.alt = ''; im.src = tr.url;
       d.appendChild(im); cl.appendChild(d);
     });
   }
@@ -266,8 +268,20 @@ async function fetchShanty(){ var r = await sb.from('shanty_lines').select('*').
 async function fetchChaos(){ var r = await sb.from('chaos_state').select('*').eq('id',1).single(); if (r.data) shared.chaos = { deployed:!!r.data.deployed, deployedBy:r.data.deployed_by }; }
 async function fetchHideSeek(){ var r = await sb.from('hide_seek').select('*').eq('id',1).single(); if (r.data) shared.hideSeek = { active:!!r.data.active, soughtId:r.data.sought_member_id, mode:r.data.mode || 'close', startedBy:r.data.started_by, startedAt:r.data.started_at }; }
 async function fetchPositions(){ var r = await sb.from('hs_positions').select('*'); if (r.data){ positions = {}; r.data.forEach(function(p){ positions[p.member_id] = p; }); } }
+async function fetchTreasures(){
+  var r = await sb.from('treasures').select('*').order('added_at');
+  if (!r.data) return;
+  var rows = r.data, paths = rows.map(function(t){ return t.photo_path; }), urls = {};
+  if (paths.length){
+    var s = await sb.storage.from('treasures').createSignedUrls(paths, 3600);
+    if (s.data) s.data.forEach(function(u, i){ if (u && u.signedUrl) urls[paths[i]] = u.signedUrl; });
+  }
+  shared.treasures = rows.map(function(t){
+    return { id:t.id, path:t.photo_path, caption:t.caption, addedBy:t.added_by, addedAt:t.added_at, url:urls[t.photo_path] || '' };
+  });
+}
 async function refreshShared(){
-  await Promise.all([fetchFlag(), fetchHorizon(), fetchIdeas(), fetchAdventures(), fetchChronicle(), fetchShanty(), fetchChaos(), fetchHideSeek(), fetchPositions()]);
+  await Promise.all([fetchFlag(), fetchHorizon(), fetchIdeas(), fetchAdventures(), fetchChronicle(), fetchShanty(), fetchChaos(), fetchHideSeek(), fetchPositions(), fetchTreasures()]);
   cacheSave(); reflectScene(); reflectLantern(); geoSync();
 }
 function subscribe(){
@@ -301,6 +315,12 @@ function subscribe(){
     .on('postgres_changes', { event:'*', schema:'public', table:'adventures' }, function(){ fetchAdventures().then(cacheSave); })
     .on('postgres_changes', { event:'*', schema:'public', table:'chronicle' }, function(){ fetchChronicle().then(cacheSave); })
     .on('postgres_changes', { event:'*', schema:'public', table:'shanty_lines' }, function(){ fetchShanty().then(cacheSave); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'treasures' }, function(){
+      fetchTreasures().then(function(){
+        cacheSave(); reflectScene();
+        var v = $('vChest'); if (v && v.classList.contains('open')) openChest();
+      });
+    })
     .subscribe();
 }
 async function connect(){
@@ -314,6 +334,7 @@ async function connect(){
   applyTime();
   await refreshShared();
   subscribe();
+  migrateLocalTreasures();
 }
 function offlineMode(){
   online = false;
@@ -359,6 +380,7 @@ function firstRun(){
     applyTime();
     await refreshShared();
     subscribe();
+    migrateLocalTreasures();
   };
 }
 
@@ -562,8 +584,14 @@ function openFlag(){
   openV('vFlag');
 }
 
-/* ================= TREASURE CHEST (this device, until the vault opens: Voyage II step 3) ================= */
+/* ================= TREASURE CHEST (the family vault) ================= */
 var pendingPhoto = null;
+function dataURLtoBlob(d){
+  var bin = atob(d.split(',')[1]);
+  var arr = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type:'image/jpeg' });
+}
 function openChest(){
   var b = body('vChest');
   var html = '<button class="wbtn" id="tAdd">Add a treasure</button>' +
@@ -572,26 +600,97 @@ function openChest(){
       '<input type="text" id="tCap" placeholder="what is this memory?"></div></div>' +
       '<div style="text-align:center;"><button class="wbtn" id="tSave">Into the chest</button></div>' +
     '</div><div id="tGrid"></div>';
-  if (!local.treasures.length) html += '<div class="notice">The chest waits for its first memory. Go and make one.</div>';
-  html += '<p class="sub" style="margin-top:14px;">Treasures live on this device for now. The shared vault opens soon, and everything here sails with it.</p>';
+  if (!shared.treasures.length) html += '<div class="notice">The chest waits for its first memory. Go and make one.</div>';
+  html += '<p class="sub" style="margin-top:14px;">The family vault: every treasure here is shared with the whole crew, kept safe for generations.</p>';
   b.innerHTML = html;
   var grid = $('tGrid');
-  local.treasures.slice().reverse().forEach(function(t){
+  shared.treasures.slice().reverse().forEach(function(t){
+    if (!t.url) return;
     var d = document.createElement('div'); d.className = 'pol';
     d.innerHTML = '<img alt=""><div class="cap"></div><div class="by"></div>';
-    d.querySelector('img').src = t.imageRef;
+    d.querySelector('img').src = t.url;
     d.querySelector('.cap').textContent = t.caption || '';
     d.querySelector('.by').textContent = t.addedBy + ' · ' + new Date(t.addedAt).toLocaleDateString();
     grid.appendChild(d);
   });
   pendingPhoto = null;
-  $('tAdd').onclick = function(){ $('photoIn').value = ''; $('photoIn').click(); };
-  $('tSave').onclick = function(){
+  $('tAdd').onclick = function(){
+    if (!online) return toast('The chest needs the island connected to keep treasures safe.');
+    $('photoIn').value = ''; $('photoIn').click();
+  };
+  $('tSave').onclick = async function(){
     if (!pendingPhoto) return;
-    local.treasures.push({ imageRef:pendingPhoto, caption:$('tCap').value.trim(), addedBy:myName(), addedAt:new Date().toISOString() });
-    saveLocal(); reflectScene(); openChest();
+    if (!online) return toast('The chest needs the island connected to keep treasures safe.');
+    var cap = $('tCap').value.trim();
+    $('tSave').disabled = true; $('tSave').textContent = 'Sailing to the vault…';
+    var path = Date.now() + '_' + (me.id || 'crew') + '.jpg';
+    var up = await sb.storage.from('treasures').upload(path, dataURLtoBlob(pendingPhoto), { contentType:'image/jpeg' });
+    if (up.error){ toast('The chest lid jammed: ' + up.error.message); $('tSave').disabled = false; $('tSave').textContent = 'Into the chest'; return; }
+    var ins = await sb.from('treasures').insert({ photo_path:path, caption:cap, added_by:myName() });
+    if (ins.error) toast('The label smudged: ' + ins.error.message);
+    await fetchTreasures();
+    cacheSave(); reflectScene(); openChest();
   };
   openV('vChest');
+}
+async function migrateLocalTreasures(){
+  if (!online || local.migrated || !local.treasures.length) return;
+  var mine = local.treasures.slice();
+  for (var i = 0; i < mine.length; i++){
+    var t = mine[i];
+    try {
+      var path = 'mig_' + Date.now() + '_' + i + '.jpg';
+      var up = await sb.storage.from('treasures').upload(path, dataURLtoBlob(t.imageRef), { contentType:'image/jpeg' });
+      if (up.error) continue;
+      await sb.from('treasures').insert({ photo_path:path, caption:t.caption || '', added_by:t.addedBy || myName() });
+    } catch(e){}
+  }
+  local.migrated = true; local.treasures = []; saveLocal();
+  await fetchTreasures();
+  cacheSave(); reflectScene();
+  toast('Your treasures sailed to the family vault.');
+}
+async function exportChest(){
+  if (!shared.treasures.length && !shared.chronicle.length && !shared.shanty.length) return toast('The chest is empty; nothing to export yet.');
+  toast('Gathering the treasures for the archive…');
+  var items = [];
+  for (var i = 0; i < shared.treasures.length; i++){
+    var t = shared.treasures[i], b64 = '';
+    try {
+      var resp = await fetch(t.url);
+      var blob = await resp.blob();
+      b64 = await new Promise(function(res){ var rd = new FileReader(); rd.onload = function(){ res(rd.result); }; rd.readAsDataURL(blob); });
+    } catch(e){}
+    items.push({ img:b64, caption:t.caption, by:t.addedBy, at:t.addedAt });
+  }
+  var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>The Chest of Ansla Island</title>' +
+    '<style>body{font-family:Palatino,Georgia,serif;background:#f4ebd2;color:#2f2213;max-width:900px;margin:0 auto;padding:30px;}' +
+    'h1,h2{letter-spacing:.1em;} .pol{display:inline-block;background:#fff;padding:10px 10px 16px;margin:10px;box-shadow:0 4px 12px rgba(0,0,0,.25);width:220px;vertical-align:top;}' +
+    '.pol img{width:100%;} .cap{font-size:13px;margin-top:6px;} .by{font-size:11px;color:#8a765a;font-style:italic;}' +
+    '.entry{border-left:3px solid #b99a68;padding:8px 14px;margin:10px 0;} .shanty{font-style:italic;font-size:17px;margin:6px 0;}</style></head><body>' +
+    '<h1>Escape from Ansla Island</h1><p><i>The family archive, exported ' + new Date().toLocaleDateString() + '. Memories are our real treasure.</i></p><h2>The Treasure Chest</h2>';
+  items.forEach(function(it){
+    h += '<div class="pol">' + (it.img ? '<img src="' + it.img + '">' : '') +
+      '<div class="cap">' + esc(it.caption || '') + '</div><div class="by">' + esc(it.by || '') + ' · ' + new Date(it.at).toLocaleDateString() + '</div></div>';
+  });
+  h += '<h2>The Chronicle</h2>';
+  shared.chronicle.forEach(function(c){
+    h += '<div class="entry">' + esc(c.entry) + '<div class="by">' + esc(c.author) + ' · ' + new Date(c.date).toLocaleDateString() + '</div></div>';
+  });
+  h += '<h2>Adventures</h2>';
+  shared.adventures.forEach(function(a){
+    h += '<div class="entry">' + esc(a.title) + (a.chaosChampion ? ' · Chaos Champion: ' + esc(a.chaosChampion) : '') +
+      '<div class="by">' + new Date(a.completedAt).toLocaleDateString() + '</div></div>';
+  });
+  h += '<h2>The Shanty of Ansla</h2>';
+  shared.shanty.forEach(function(s){ h += '<div class="shanty">&ldquo;' + esc(s.line) + '&rdquo; <span class="by">' + esc(s.author) + '</span></div>'; });
+  h += '<p><i>Family is our crew. Adventure is our way.</i></p></body></html>';
+  var blob2 = new Blob([h], { type:'text/html' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob2);
+  a.download = 'ansla-island-archive-' + new Date().toISOString().slice(0, 10) + '.html';
+  a.click();
+  toast('The archive is in your downloads. Keep it somewhere that outlives us all.');
 }
 function bindPhotoInput(){
   $('photoIn').addEventListener('change', function(){
@@ -1011,7 +1110,9 @@ function openSettings(){
     '<div class="cat">This device</div>' +
     '<p style="font-size:13.5px; margin:6px 0;">Signed on as ' + esc(myName()) + (online ? ' · sailing with the crew' : ' · beyond the reef (offline)') + '</p>' +
     '<button class="wbtn ghost" id="sgReset">This device forgets the island</button>' +
-    '<p class="sub" style="margin-top:14px;">Escape from Ansla Island &middot; Voyage II &middot; shared with the crew; photos stay on this device until the vault opens.</p>';
+    '<div class="cat">The archive</div>' +
+    '<button class="wbtn ghost" id="sgExport">Export the chest (keep it forever)</button>' +
+    '<p class="sub" style="margin-top:14px;">Escape from Ansla Island &middot; Voyage II &middot; one island, shared by the whole crew.</p>';
   var row = $('todRow');
   ['auto','dawn','day','dusk','night'].forEach(function(t){
     var btn = document.createElement('button');
@@ -1020,6 +1121,7 @@ function openSettings(){
     btn.onclick = function(){ local.settings.timeOverride = t; saveLocal(); applyTime(); openSettings(); };
     row.appendChild(btn);
   });
+  $('sgExport').onclick = exportChest;
   var armed = false;
   $('sgReset').onclick = async function(){
     if (!armed){ armed = true; $('sgReset').textContent = 'Truly? This device will need the crew code again. The shared island is untouched. Tap again.'; return; }
