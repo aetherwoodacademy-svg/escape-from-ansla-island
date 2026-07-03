@@ -51,8 +51,6 @@ var CHAOS_TEASES = [
 ];
 var GREETINGS = { dawn:'Good morning, Captain.', day:'Good day, Captain.', dusk:'Good evening, Captain.', night:'The stars keep watch, Captain.' };
 var WHEN_CHOICES = ['At first light','Midmorning','High sun','Golden hour','Under the stars','When the drums sound'];
-var DIRS = [['North','the wild horizon'],['North-east','the morning water'],['East','the rising sun'],['South-east','the river mouth'],
-            ['South','the old mountain'],['South-west','the deep forest'],['West','the setting sun'],['North-west','the far headland']];
 var IDLE_MIN = 20000, IDLE_MAX = 45000;
 var PHOTO_MAX_EDGE = 700, PHOTO_QUALITY = 0.7;
 var HUNT_PUBLISH_MS = { close:10000, long:60000 };
@@ -638,27 +636,68 @@ function openStone(){
   openV('vStone');
 }
 
-/* ================= COMPASS ================= */
-function openCompass(){
-  body('vCompass').innerHTML =
-    '<div id="roseWrap"><svg width="150" height="150" viewBox="0 0 120 120">' +
+/* ================= THE REAL COMPASS ================= */
+var deviceHeading = null, headingActive = false;
+function headingSupported(){ return typeof DeviceOrientationEvent !== 'undefined'; }
+function headingNeedsPermission(){ return headingSupported() && typeof DeviceOrientationEvent.requestPermission === 'function'; }
+function onOrient(e){
+  var h = null;
+  if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;
+  else if (typeof e.alpha === 'number' && (e.absolute === true || e.type === 'deviceorientationabsolute')) h = (360 - e.alpha) % 360;
+  if (h !== null){ deviceHeading = h; updateNeedles(); }
+}
+function startHeading(){
+  if (headingActive || !headingSupported()) return;
+  headingActive = true;
+  window.addEventListener('deviceorientationabsolute', onOrient, true);
+  window.addEventListener('deviceorientation', onOrient, true);
+}
+async function awakenNeedle(){
+  if (headingNeedsPermission()){
+    try {
+      var res = await DeviceOrientationEvent.requestPermission();
+      if (res !== 'granted') return toast('The needle stays asleep without your blessing.');
+    } catch(e){ return toast('The needle stays asleep on this shore.'); }
+  }
+  startHeading();
+  openCompassRefresh();
+  renderHuntIfOpen();
+}
+function updateNeedles(){
+  document.querySelectorAll('.liveNeedle').forEach(function(n){
+    var brg = parseFloat(n.getAttribute('data-bearing')) || 0;
+    var rot = deviceHeading === null ? brg : (brg - deviceHeading + 360) % 360;
+    n.setAttribute('transform', 'rotate(' + Math.round(rot) + ' 60 60)');
+  });
+  var hd = $('cHead');
+  if (hd && deviceHeading !== null) hd.textContent = Math.round(deviceHeading) + '° · facing ' + compassWord(deviceHeading);
+}
+function roseSvg(bearing){
+  return '<div id="roseWrap"><svg width="170" height="170" viewBox="0 0 120 120">' +
     '<circle cx="60" cy="60" r="56" fill="#1e2b45" stroke="#c9a86a" stroke-width="2.5"/>' +
     '<circle cx="60" cy="60" r="44" fill="none" stroke="#8fa3c9" stroke-width=".7" opacity=".6"/>' +
     '<text x="60" y="16" fill="#e8d9b5" font-size="11" text-anchor="middle">N</text>' +
     '<text x="60" y="112" fill="#8fa3c9" font-size="10" text-anchor="middle">S</text>' +
     '<text x="109" y="64" fill="#8fa3c9" font-size="10" text-anchor="middle">E</text>' +
     '<text x="11" y="64" fill="#8fa3c9" font-size="10" text-anchor="middle">W</text>' +
-    '<polygon id="needle" points="60,22 65,60 60,74 55,60" fill="#e05a4e" stroke="#e8d9b5" stroke-width=".8"/>' +
-    '</svg></div><p id="cWord" style="text-align:center; font-style:italic; min-height:44px;"></p>' +
-    '<p class="sub" style="text-align:center;">One day this needle will be real, and you will carry it on adventures.</p>';
-  var pick = DIRS[Math.floor(Math.random() * DIRS.length)];
-  var deg = 720 + DIRS.indexOf(pick) * 45;
-  setTimeout(function(){
-    var n = $('needle'); if (n) n.style.transform = 'rotate(' + deg + 'deg)';
-    setTimeout(function(){
-      var w = $('cWord'); if (w) w.textContent = 'The needle settles ' + pick[0].toLowerCase() + ', toward ' + pick[1] + '. What waits there?';
-    }, 2600);
-  }, 250);
+    '<polygon class="liveNeedle" data-bearing="' + Math.round(bearing) + '" points="60,22 65,60 60,74 55,60" fill="#e05a4e" stroke="#e8d9b5" stroke-width=".8" transform="rotate(' + Math.round(bearing) + ' 60 60)"/>' +
+    '</svg></div>';
+}
+function openCompassRefresh(){
+  var v = $('vCompass'); if (v && v.classList.contains('open')) openCompass();
+}
+function openCompass(){
+  var needP = headingNeedsPermission() && !headingActive;
+  body('vCompass').innerHTML =
+    roseSvg(0) +
+    '<p id="cHead" style="text-align:center; font-size:16.5px; min-height:24px;">' +
+    (deviceHeading !== null ? '' : 'The needle sleeps.') + '</p>' +
+    (needP ? '<div style="text-align:center;"><button class="wbtn" id="cAwaken">Awaken the needle</button></div>' : '') +
+    (!headingSupported() ? '<p class="sub" style="text-align:center;">This shore has no sense of direction. Carry the island in your pocket instead.</p>' : '') +
+    '<p class="sub" style="text-align:center; margin-top:10px;">A true compass. Carry it on adventures; it always knows north, and during a hunt it knows more.</p>';
+  if ($('cAwaken')) $('cAwaken').onclick = awakenNeedle;
+  if (!headingNeedsPermission()) startHeading();
+  updateNeedles();
   openV('vCompass');
 }
 
@@ -930,13 +969,12 @@ function renderHunt(){
       if (sp && mp && sp.lat != null && mp.lat != null){
         var km = haversineKm({ lat:mp.lat, lng:mp.lng }, { lat:sp.lat, lng:sp.lng });
         var brg = bearingDeg({ lat:mp.lat, lng:mp.lng }, { lat:sp.lat, lng:sp.lng });
-        html += '<div id="roseWrap"><svg width="150" height="150" viewBox="0 0 120 120">' +
-          '<circle cx="60" cy="60" r="56" fill="#1e2b45" stroke="#c9a86a" stroke-width="2.5"/>' +
-          '<text x="60" y="16" fill="#e8d9b5" font-size="11" text-anchor="middle">N</text>' +
-          '<polygon points="60,22 65,60 60,74 55,60" fill="#e05a4e" stroke="#e8d9b5" stroke-width=".8" transform="rotate(' + Math.round(brg) + ' 60 60)"/>' +
-          '</svg></div>' +
+        html += roseSvg(brg) +
           '<p style="text-align:center; font-size:17px;">' + fmtDist(km) + ' to the ' + compassWord(brg) + '</p>' +
-          '<p class="sub" style="text-align:center;">The needle points from north. Face north and follow it.</p>';
+          (deviceHeading !== null
+            ? '<p class="sub" style="text-align:center;">Follow the needle. It points at them.</p>'
+            : '<p class="sub" style="text-align:center;">The needle points from north. Face north and follow it' +
+              (headingNeedsPermission() ? ', or <button class="wbtn ghost" id="hAwaken" style="font-size:12px; padding:4px 10px;">awaken the needle</button>' : '') + '</p>');
       } else {
         html += '<div class="notice">' + (window.isSecureContext
           ? 'The island is listening for positions&hellip; move about and give it a moment.'
@@ -960,6 +998,8 @@ function renderHunt(){
     if ($('huntFound')) $('huntFound').onclick = function(){ endHunt(myName()); };
     if ($('huntCaught')) $('huntCaught').onclick = function(){ endHunt(myName()); };
     if ($('huntDouse')) $('huntDouse').onclick = function(){ endHunt(null); };
+    if ($('hAwaken')) $('hAwaken').onclick = awakenNeedle;
+    updateNeedles();
   }
 }
 

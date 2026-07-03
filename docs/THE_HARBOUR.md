@@ -40,6 +40,12 @@ Its own line item from the discovery phase: the island knowing what creatures ar
 ### Open design questions
 - Chaos Champion extra reward type (motif flourish? crown by name? shanty privilege?)
 
+### Giant Hide & Seek: future layers (core built 4 Jul 2026)
+- **Guest hunters (second rollout, Ange):** family friends invited to find the crew — needs a guest access model (single-hunt invite code or link, no full crew membership)
+- Audio squeak for the tension cue (all island audio is deferred as one pass)
+- Device-heading needle (compass physically points as you turn; needs motion permission on iOS — current needle is north-referenced)
+- Hunt history / longest chase records in the Chronicle
+
 ### Decided from the Harbour
 - **One flag + "On the horizon" (LOCKED by Ange, 2 Jul 2026):** one set of colours flies at a time; planned adventures queue in an "On the horizon" section of the board with their island-time. Hoisting the next remains a deliberate ceremony, never automatic.
 
