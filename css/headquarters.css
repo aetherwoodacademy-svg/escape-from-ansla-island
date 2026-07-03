@@ -17,55 +17,43 @@
 
   /* ---------- HOTSPOTS (invisible) ---------- */
   .hs { position:absolute; cursor:pointer; }
-  #hs-flag     { left:3.5%;  top:3%;   width:11%;   height:16%; }
-  #hs-rollo    { left:8%;    top:29%;  width:20%;   height:18%; }
-  #hs-board    { left:30%;   top:19%;  width:37%;   height:32%; }
-  #hs-chest    { left:70%;   top:21%;  width:25%;   height:33%; }
-  #hs-call     { left:70%;   top:55%;  width:25%;   height:17%; }
-  #hs-compass  { left:18%;   top:62%;  width:15%;   height:15%; }
-  #hs-lantern  { left:34%;   top:57%;  width:10%;   height:18%; }
-  #hs-idea     { left:34%;   top:51.5%; width:23%;  height:5.5%; }
-  #hs-chron    { left:45%;   top:58%;  width:17%;   height:20%; }
-  #hs-chaos    { left:62.5%; top:60%;  width:9.5%;  height:16%; }
-  #hs-stone    { left:74%;   top:76%;  width:22%;   height:15%; }
-  #hs-crew     { left:0.5%;  top:79%;  width:7%;    height:12%; }
-  #hs-settings { left:92.5%; top:80%;  width:7%;    height:14%; }
+  #hs-flag     { left:15%;   top:0%;   width:15%;   height:14%; }
+  #hs-rollo    { left:0%;    top:60%;  width:17%;   height:26%; }
+  #hs-board    { left:33%;   top:13%;  width:32%;   height:40%; }
+  #hs-chest    { left:66%;   top:49%;  width:20%;   height:26%; }
+  #hs-call     { left:71%;   top:75%;  width:20%;   height:15%; }
+  #hs-compass  { left:22.5%; top:70%;  width:15.5%; height:19%; }
+  #hs-lantern  { left:34%;   top:50%;  width:10.5%; height:20%; }
+  #hs-idea     { left:5%;    top:29%;  width:12%;   height:21%; }
+  #hs-chron    { left:38%;   top:67%;  width:19%;   height:19%; }
+  #hs-chaos    { left:53.5%; top:42%;  width:8.5%;  height:18%; }
+  #hs-stone    { left:88%;   top:32%;  width:12%;   height:50%; }
+  #hs-crew     { left:82.5%; top:9.5%; width:9.5%;  height:16%; }
+  #hs-settings { left:92.5%; top:5%;   width:7.5%;  height:23%; }
 
-  /* live greeting covers the baked-in parchment text */
-  #greet { position:absolute; left:73.9%; top:3.1%; width:16.6%; height:14.6%;
-    background:radial-gradient(ellipse at 50% 35%, #ecdcb4 0%, #dfc99a 70%, #c9ad78 100%);
-    border:1px solid #8a6a3e; border-radius:3px; transform:rotate(-.6deg);
-    box-shadow:0 4px 14px rgba(0,0,0,.55); display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:6%; padding:2%; text-align:center; }
+  /* live greeting written straight onto the blank hanging parchment */
+  #greet { position:absolute; left:83%; top:10.5%; width:8.8%; height:14%;
+    background:transparent; transform:rotate(6deg); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:6%; padding:1.5%; text-align:center; }
   #greetName { font-family:'Snell Roundhand','Savoye LET','Brush Script MT',cursive;
-    font-size:clamp(14px,2.4vh,30px); color:#4a2f14; line-height:1.05; }
-  #greetTime { background:#2c2318; color:#e8d9b5; font-size:clamp(8px,1.25vh,14px);
-    padding:.35em .9em; border-radius:3px; letter-spacing:.04em; }
+    font-size:clamp(11px,1.9vh,24px); color:#4a2f14; line-height:1.05; }
+  #greetTime { background:rgba(44,35,24,.82); color:#e8d9b5; font-size:clamp(7px,1vh,12px);
+    padding:.3em .7em; border-radius:3px; letter-spacing:.04em; }
 
-  /* live scene overlays (cover baked-in concept text until final art is text-free) */
-  #signFix { position:absolute; left:-0.2%; top:33.9%; width:10.2%; height:20.6%; pointer-events:none;
-    background:linear-gradient(168deg,#e9d9b2,#d3ba8a); border:1px solid #8a6a3e; border-radius:2px;
-    transform:rotate(1.4deg); box-shadow:0 3px 10px rgba(0,0,0,.5); padding:5% 4%;
-    color:#4a3418; text-align:center; display:flex; flex-direction:column; justify-content:center; gap:4%; }
-  #signFix b { font-size:clamp(9px,1.6vh,19px); letter-spacing:.1em; }
-  #signFix span { font-size:clamp(7px,1.05vh,13px); font-style:italic; line-height:1.3; }
-  #bannerFix { position:absolute; left:25.2%; top:91.8%; width:44.8%; height:5.4%; pointer-events:none;
-    background:linear-gradient(#e6d5aa,#d0b684); border:1px solid #7a5a32; border-radius:3px;
-    transform:rotate(-.2deg); box-shadow:0 3px 10px rgba(0,0,0,.5); display:flex; align-items:center;
-    justify-content:center; color:#3a2812; font-size:clamp(8px,1.5vh,17px); letter-spacing:.14em; white-space:nowrap; overflow:hidden; }
-  #boardLive { position:absolute; left:33.5%; top:26%; width:32.6%; height:24.4%; pointer-events:none;
-    background:radial-gradient(ellipse at 50% 30%, #efe1bb 0%, #e0ca9c 65%, #cfb383 100%);
-    border:1px solid #8a6a3e; border-radius:3px; transform:rotate(.25deg);
-    box-shadow:0 4px 14px rgba(0,0,0,.45); padding:2.2% 3%; color:#3a2812;
+  /* live adventure card written onto the blank noticeboard parchment */
+  #boardLive { position:absolute; left:40.2%; top:19.5%; width:20.4%; height:26%; pointer-events:none;
+    background:transparent; border:none; border-radius:3px; transform:rotate(.6deg);
+    padding:2.5% 2.5%; color:#3a2812;
     display:flex; flex-direction:column; justify-content:center; gap:3%; }
   #blTitle { font-size:clamp(11px,2vh,23px); font-weight:bold; color:#5a1e3a; letter-spacing:.03em; }
   #blBody { font-size:clamp(9px,1.6vh,18px); line-height:1.35; }
   #blBody small { color:#7a5a32; font-style:italic; font-size:clamp(8px,1.25vh,14px); }
-  #boardLive.hasArt { background-size:cover; background-position:center 40%; }
+  #boardLive.hasArt { background-size:cover; background-position:center 40%;
+    border:1px solid #6b4a2a; box-shadow:0 4px 14px rgba(0,0,0,.45); }
   #boardLive.hasArt #blTitle { color:#ffe9b0; text-shadow:0 2px 8px rgba(0,0,0,.85); }
   #boardLive.hasArt #blBody { color:#f6ead0; text-shadow:0 1px 6px rgba(0,0,0,.85); }
   #boardLive.hasArt #blBody small { color:#e8cf9e; }
-  #chestLive { position:absolute; left:75.4%; top:33.6%; width:17.6%; height:12.2%; pointer-events:none; overflow:hidden; }
+  #chestLive { position:absolute; left:67.5%; top:59.5%; width:16%; height:12.5%; pointer-events:none; overflow:hidden; }
   #chestLive .mini { position:absolute; width:35%; background:#f6efdc; border:1px solid #b9a67d;
     padding:2% 2% 6%; box-shadow:0 4px 9px rgba(20,10,4,.65); bottom:-14%; }
   #chestLive .mini img { width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; display:block; }
@@ -74,10 +62,10 @@
   #chestLive .mini:nth-child(3){ left:58%; transform:rotate(5.5deg); }
 
   /* pennant: the crew's colours, hoisted beside the Ansla standard */
-  #pennant { position:absolute; left:11.9%; width:8.2%; aspect-ratio:1/1; pointer-events:none;
+  #pennant { position:absolute; left:17.8%; width:8%; aspect-ratio:1/1; pointer-events:none;
     background:url('../art/concepts/ansla-emblem.png') center/cover; border:1px solid #2a1c10; border-radius:2px;
-    box-shadow:0 5px 16px rgba(0,0,0,.65); top:23%; opacity:0; transition:top 2.6s ease-in-out, opacity 1s ease; }
-  #pennant.up { top:2.6%; opacity:1; animation:pennantSway 4s ease-in-out 2.6s infinite; }
+    box-shadow:0 5px 16px rgba(0,0,0,.65); top:15%; opacity:0; transition:top 2.6s ease-in-out, opacity 1s ease; }
+  #pennant.up { top:1.5%; opacity:1; animation:pennantSway 4s ease-in-out 2.6s infinite; }
   @keyframes pennantSway { 0%,100%{ transform:rotate(-1.6deg);} 50%{ transform:rotate(2.2deg);} }
 
   /* proclamation flash */
@@ -88,7 +76,7 @@
     text-shadow:0 4px 30px rgba(0,0,0,.9), 0 0 60px rgba(255,190,90,.35); text-align:center; padding:0 20px; }
   @keyframes procFade { 0%{opacity:0;} 14%{opacity:1;} 78%{opacity:1;} 100%{opacity:0;} }
   #boardLive.pop { animation:boardPop .55s cubic-bezier(.2,1.6,.4,1); }
-  @keyframes boardPop { 0%{ transform:scale(.6) rotate(-3deg); } 100%{ transform:scale(1) rotate(.25deg); } }
+  @keyframes boardPop { 0%{ transform:scale(.6) rotate(-3deg); } 100%{ transform:scale(1) rotate(.6deg); } }
 
   /* island-time chips */
   .whenChip { display:inline-block; background:rgba(30,43,69,.85); color:#e8d9b5; border:1px solid #c9a86a;
@@ -122,18 +110,18 @@
     font-family:'Bradley Hand','Snell Roundhand','Segoe Script',cursive !important; font-size:15px !important; }
 
   /* rollo bark arcs + idle shimmer */
-  #rolloFx { position:absolute; left:21%; top:33.5%; width:4%; height:6%; pointer-events:none; }
+  #rolloFx { position:absolute; left:8.5%; top:71%; width:4.5%; height:7%; pointer-events:none; }
   #rolloFx span { position:absolute; inset:0; border:2px solid rgba(255,240,210,.85); border-radius:50%;
     border-left-color:transparent; border-bottom-color:transparent; transform:rotate(-45deg) scale(.3); opacity:0; }
   #rolloFx.bark span { animation:barkArc .9s ease-out forwards; }
   #rolloFx.bark span:nth-child(2){ animation-delay:.15s; } #rolloFx.bark span:nth-child(3){ animation-delay:.3s; }
   @keyframes barkArc { 0%{opacity:0;transform:rotate(-45deg) scale(.3);} 25%{opacity:.9;} 100%{opacity:0;transform:rotate(-45deg) scale(1.8);} }
-  #rolloIdle { position:absolute; left:10%; top:30%; width:16%; height:16%; pointer-events:none; border-radius:50%;
+  #rolloIdle { position:absolute; left:0%; top:59%; width:17%; height:27%; pointer-events:none; border-radius:50%;
     background:radial-gradient(ellipse, rgba(255,225,170,.14), transparent 65%); opacity:0; transition:opacity 1.6s ease; }
   #rolloIdle.on { opacity:1; }
 
   /* lantern glow for hide & seek */
-  #lanternGlow { position:absolute; left:31.5%; top:50%; width:15%; height:28%; pointer-events:none; border-radius:50%;
+  #lanternGlow { position:absolute; left:30.5%; top:44%; width:17%; height:30%; pointer-events:none; border-radius:50%;
     background:radial-gradient(ellipse, rgba(255,200,90,.5), rgba(255,170,50,.18) 45%, transparent 70%);
     opacity:0; transition:opacity 1.2s ease; }
   #lanternGlow.on { opacity:1; animation:flick 2.6s ease-in-out infinite; }
