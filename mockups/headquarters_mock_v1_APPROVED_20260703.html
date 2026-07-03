@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ansla Island">
+<meta name="theme-color" content="#120c06">
+<link rel="apple-touch-icon" href="art/concepts/ansla-emblem.png">
+<title>Escape from Ansla Island</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; background:#120c06; overflow:hidden; font-family:Palatino,'Palatino Linotype',Georgia,serif; }
+
+  /* ---------- STAGE & SCENE ---------- */
+  #stage { position:fixed; inset:0; overflow:hidden; cursor:grab; touch-action:none; }
+  #stage.dragging { cursor:grabbing; }
+  #scene { position:absolute; top:0; left:0; will-change:transform; }
+  #scene img.bg { display:block; user-select:none; -webkit-user-drag:none; pointer-events:none; }
+
+  /* time-of-day tint layers */
+  .tintA,.tintB { position:absolute; inset:0; pointer-events:none; transition:background 2s ease, opacity 2s ease; }
+  .tintA { mix-blend-mode:soft-light; }
+  #scene.t-dawn  .tintA { background:rgba(255,196,140,.35); } #scene.t-dawn  .tintB { background:rgba(255,170,90,.06); }
+  #scene.t-day   .tintA { background:rgba(190,220,255,.30); } #scene.t-day   .tintB { background:rgba(210,230,255,.05); }
+  #scene.t-dusk  .tintA { background:transparent; }           #scene.t-dusk  .tintB { background:transparent; }
+  #scene.t-night .tintA { background:rgba(40,60,120,.35); }   #scene.t-night .tintB { background:rgba(6,12,34,.42); }
+
+  /* ---------- HOTSPOTS (invisible) ---------- */
+  .hs { position:absolute; cursor:pointer; }
+  #hs-flag     { left:3.5%;  top:3%;   width:11%;   height:16%; }
+  #hs-rollo    { left:8%;    top:29%;  width:20%;   height:18%; }
+  #hs-board    { left:30%;   top:19%;  width:37%;   height:32%; }
+  #hs-chest    { left:70%;   top:21%;  width:25%;   height:33%; }
+  #hs-call     { left:70%;   top:55%;  width:25%;   height:17%; }
+  #hs-compass  { left:18%;   top:62%;  width:15%;   height:15%; }
+  #hs-lantern  { left:34%;   top:57%;  width:10%;   height:18%; }
+  #hs-idea     { left:34%;   top:51.5%; width:23%;  height:5.5%; }
+  #hs-chron    { left:45%;   top:58%;  width:17%;   height:20%; }
+  #hs-chaos    { left:62.5%; top:60%;  width:9.5%;  height:16%; }
+  #hs-stone    { left:74%;   top:76%;  width:22%;   height:15%; }
+  #hs-crew     { left:0.5%;  top:79%;  width:7%;    height:12%; }
+  #hs-settings { left:92.5%; top:80%;  width:7%;    height:14%; }
+
+  /* live greeting covers the baked-in parchment text */
+  #greet { position:absolute; left:73.9%; top:3.1%; width:16.6%; height:14.6%;
+    background:radial-gradient(ellipse at 50% 35%, #ecdcb4 0%, #dfc99a 70%, #c9ad78 100%);
+    border:1px solid #8a6a3e; border-radius:3px; transform:rotate(-.6deg);
+    box-shadow:0 4px 14px rgba(0,0,0,.55); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:6%; padding:2%; text-align:center; }
+  #greetName { font-family:'Snell Roundhand','Savoye LET','Brush Script MT',cursive;
+    font-size:clamp(14px,2.4vh,30px); color:#4a2f14; line-height:1.05; }
+  #greetTime { background:#2c2318; color:#e8d9b5; font-size:clamp(8px,1.25vh,14px);
+    padding:.35em .9em; border-radius:3px; letter-spacing:.04em; }
+
+  /* live scene overlays (cover baked-in concept text until final art is text-free) */
+  #signFix { position:absolute; left:-0.2%; top:33.9%; width:10.2%; height:20.6%; pointer-events:none;
+    background:linear-gradient(168deg,#e9d9b2,#d3ba8a); border:1px solid #8a6a3e; border-radius:2px;
+    transform:rotate(1.4deg); box-shadow:0 3px 10px rgba(0,0,0,.5); padding:5% 4%;
+    color:#4a3418; text-align:center; display:flex; flex-direction:column; justify-content:center; gap:4%; }
+  #signFix b { font-size:clamp(9px,1.6vh,19px); letter-spacing:.1em; }
+  #signFix span { font-size:clamp(7px,1.05vh,13px); font-style:italic; line-height:1.3; }
+  #bannerFix { position:absolute; left:25.2%; top:91.8%; width:44.8%; height:5.4%; pointer-events:none;
+    background:linear-gradient(#e6d5aa,#d0b684); border:1px solid #7a5a32; border-radius:3px;
+    transform:rotate(-.2deg); box-shadow:0 3px 10px rgba(0,0,0,.5); display:flex; align-items:center;
+    justify-content:center; color:#3a2812; font-size:clamp(8px,1.5vh,17px); letter-spacing:.14em; white-space:nowrap; overflow:hidden; }
+  #boardLive { position:absolute; left:33.5%; top:26%; width:32.6%; height:24.4%; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 30%, #efe1bb 0%, #e0ca9c 65%, #cfb383 100%);
+    border:1px solid #8a6a3e; border-radius:3px; transform:rotate(.25deg);
+    box-shadow:0 4px 14px rgba(0,0,0,.45); padding:2.2% 3%; color:#3a2812;
+    display:flex; flex-direction:column; justify-content:center; gap:3%; }
+  #blTitle { font-size:clamp(11px,2vh,23px); font-weight:bold; color:#5a1e3a; letter-spacing:.03em; }
+  #blBody { font-size:clamp(9px,1.6vh,18px); line-height:1.35; }
+  #blBody small { color:#7a5a32; font-style:italic; font-size:clamp(8px,1.25vh,14px); }
+  #boardLive.hasArt { background-size:cover; background-position:center 40%; }
+  #boardLive.hasArt #blTitle { color:#ffe9b0; text-shadow:0 2px 8px rgba(0,0,0,.85); }
+  #boardLive.hasArt #blBody { color:#f6ead0; text-shadow:0 1px 6px rgba(0,0,0,.85); }
+  #boardLive.hasArt #blBody small { color:#e8cf9e; }
+  #chestLive { position:absolute; left:75.4%; top:33.6%; width:17.6%; height:12.2%; pointer-events:none; overflow:hidden; }
+  #chestLive .mini { position:absolute; width:35%; background:#f6efdc; border:1px solid #b9a67d;
+    padding:2% 2% 6%; box-shadow:0 4px 9px rgba(20,10,4,.65); bottom:-14%; }
+  #chestLive .mini img { width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; display:block; }
+  #chestLive .mini:nth-child(1){ left:6%;  transform:rotate(-4deg); }
+  #chestLive .mini:nth-child(2){ left:32%; bottom:-10%; transform:rotate(2deg); }
+  #chestLive .mini:nth-child(3){ left:58%; transform:rotate(5.5deg); }
+
+  /* pennant: the crew's colours, hoisted beside the Ansla standard */
+  #pennant { position:absolute; left:11.9%; width:8.2%; aspect-ratio:1/1; pointer-events:none;
+    background:url('art/concepts/ansla-emblem.png') center/cover; border:1px solid #2a1c10; border-radius:2px;
+    box-shadow:0 5px 16px rgba(0,0,0,.65); top:23%; opacity:0; transition:top 2.6s ease-in-out, opacity 1s ease; }
+  #pennant.up { top:2.6%; opacity:1; animation:pennantSway 4s ease-in-out 2.6s infinite; }
+  @keyframes pennantSway { 0%,100%{ transform:rotate(-1.6deg);} 50%{ transform:rotate(2.2deg);} }
+
+  /* proclamation flash */
+  #proclaim { position:fixed; inset:0; z-index:110; display:none; align-items:center; justify-content:center;
+    background:rgba(10,6,2,.55); pointer-events:none; }
+  #proclaim.show { display:flex; animation:procFade 2.2s ease forwards; }
+  #proclaim span { color:#f2e2b8; font-size:clamp(26px,6vw,58px); letter-spacing:.18em; text-transform:uppercase;
+    text-shadow:0 4px 30px rgba(0,0,0,.9), 0 0 60px rgba(255,190,90,.35); text-align:center; padding:0 20px; }
+  @keyframes procFade { 0%{opacity:0;} 14%{opacity:1;} 78%{opacity:1;} 100%{opacity:0;} }
+  #boardLive.pop { animation:boardPop .55s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes boardPop { 0%{ transform:scale(.6) rotate(-3deg); } 100%{ transform:scale(1) rotate(.25deg); } }
+
+  /* island-time chips */
+  .whenChip { display:inline-block; background:rgba(30,43,69,.85); color:#e8d9b5; border:1px solid #c9a86a;
+    border-radius:14px; padding:6px 13px; margin:3px 5px 3px 0; font-size:13.5px; cursor:pointer; }
+  .whenChip.sel { background:#c9a86a; color:#2a1c10; }
+
+  /* handwriting: scroll + journal */
+  .handFont { font-family:'Bradley Hand','Snell Roundhand','Segoe Script','Comic Sans MS',cursive; }
+  .panel input.scrollInput { background:linear-gradient(90deg,#d9c188 0%, #f0e3bd 8%, #f0e3bd 92%, #d9c188 100%);
+    border:1px solid #8a6a3e; border-radius:10px; font-family:'Bradley Hand','Snell Roundhand','Segoe Script',cursive;
+    font-size:17px; padding:12px 18px; color:#3a2812; }
+  .panel textarea.journal { background:#f4ebd2 repeating-linear-gradient(transparent, transparent 26px, #c9b485 27px);
+    line-height:27px; font-family:'Bradley Hand','Snell Roundhand','Segoe Script',cursive; font-size:16px;
+    border:1px solid #a98c5c; color:#3a2812; }
+  .entryHand { font-family:'Bradley Hand','Snell Roundhand','Segoe Script',cursive; font-size:15.5px; }
+
+  /* crowning picks */
+  .pickChip { display:inline-block; background:transparent; color:#4a2f14; border:1px solid #6b4a2a; border-radius:5px;
+    padding:9px 16px; margin:4px 6px 4px 0; font-family:inherit; font-size:14.5px; cursor:pointer; transition:all .25s; }
+  .pickChip.sel { background:linear-gradient(#e8c96a,#c9a13e); border-color:#8a6a1e; color:#2a1c05;
+    box-shadow:0 0 14px rgba(230,190,90,.55); animation:crownPulse .5s ease; }
+  @keyframes crownPulse { 0%{transform:scale(.85);} 60%{transform:scale(1.08);} 100%{transform:scale(1);} }
+
+  /* developing polaroid */
+  .devWrap { display:flex; justify-content:center; margin:10px 0; }
+  .devPol { background:#f6efdc; border:1px solid #b9a67d; padding:10px 10px 14px; box-shadow:0 5px 16px rgba(0,0,0,.4);
+    transform:rotate(-1.5deg); width:210px; }
+  .devPol img { width:100%; height:150px; object-fit:cover; display:block; animation:develop 2.6s ease forwards; }
+  @keyframes develop { 0%{ filter:grayscale(1) brightness(2.1) blur(7px) sepia(.4); } 100%{ filter:none; } }
+  .devPol input { border:none !important; background:transparent !important; text-align:center;
+    font-family:'Bradley Hand','Snell Roundhand','Segoe Script',cursive !important; font-size:15px !important; }
+
+  /* rollo bark arcs + idle shimmer */
+  #rolloFx { position:absolute; left:21%; top:33.5%; width:4%; height:6%; pointer-events:none; }
+  #rolloFx span { position:absolute; inset:0; border:2px solid rgba(255,240,210,.85); border-radius:50%;
+    border-left-color:transparent; border-bottom-color:transparent; transform:rotate(-45deg) scale(.3); opacity:0; }
+  #rolloFx.bark span { animation:barkArc .9s ease-out forwards; }
+  #rolloFx.bark span:nth-child(2){ animation-delay:.15s; } #rolloFx.bark span:nth-child(3){ animation-delay:.3s; }
+  @keyframes barkArc { 0%{opacity:0;transform:rotate(-45deg) scale(.3);} 25%{opacity:.9;} 100%{opacity:0;transform:rotate(-45deg) scale(1.8);} }
+  #rolloIdle { position:absolute; left:10%; top:30%; width:16%; height:16%; pointer-events:none; border-radius:50%;
+    background:radial-gradient(ellipse, rgba(255,225,170,.14), transparent 65%); opacity:0; transition:opacity 1.6s ease; }
+  #rolloIdle.on { opacity:1; }
+
+  /* lantern glow for hide & seek */
+  #lanternGlow { position:absolute; left:31.5%; top:50%; width:15%; height:28%; pointer-events:none; border-radius:50%;
+    background:radial-gradient(ellipse, rgba(255,200,90,.5), rgba(255,170,50,.18) 45%, transparent 70%);
+    opacity:0; transition:opacity 1.2s ease; }
+  #lanternGlow.on { opacity:1; animation:flick 2.6s ease-in-out infinite; }
+  @keyframes flick { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.25);} }
+
+  /* tap ripple */
+  .ripple { position:absolute; width:14px; height:14px; border-radius:50%; pointer-events:none;
+    border:2px solid rgba(255,235,190,.8); transform:translate(-50%,-50%) scale(1); animation:rip .7s ease-out forwards; }
+  @keyframes rip { to { transform:translate(-50%,-50%) scale(6); opacity:0; } }
+
+  /* hide & seek banner */
+  #hsBanner { position:fixed; top:12px; left:50%; transform:translateX(-50%) rotate(-.4deg); z-index:60; display:none;
+    background:linear-gradient(#ead9b0,#d9c188); color:#3a2812; border:1px solid #7a5a32; border-radius:4px;
+    padding:8px 22px; font-size:15px; letter-spacing:.06em; box-shadow:0 4px 16px rgba(0,0,0,.6); }
+  #hsBanner.show { display:block; }
+
+  /* ---------- PANELS ---------- */
+  .veil { position:fixed; inset:0; z-index:80; display:none; background:rgba(8,5,2,.72); overflow-y:auto; }
+  .veil.open { display:flex; align-items:flex-start; justify-content:center; }
+  .panel { position:relative; margin:5vh 16px 6vh; width:min(680px,94vw);
+    background:linear-gradient(#ecdcb4 0%, #e0ca9c 55%, #d2b988 100%);
+    border:2px solid #6b4a2a; border-radius:8px; box-shadow:0 10px 44px rgba(0,0,0,.75), inset 0 0 60px rgba(120,84,40,.25);
+    color:#2f2213; padding:26px 26px 30px; }
+  .panel h2 { font-size:21px; letter-spacing:.14em; text-transform:uppercase; color:#4a2f14; margin-bottom:4px; }
+  .panel .sub { font-style:italic; color:#6b5230; font-size:14px; margin-bottom:16px; }
+  .panel .closeX { position:absolute; top:10px; right:12px; width:38px; height:38px; border:1px solid #6b4a2a;
+    border-radius:50%; background:#3a2812; color:#ecdcb4; font-size:19px; line-height:36px; text-align:center; cursor:pointer; }
+  .wbtn { display:inline-block; background:#5a3c22; color:#ecdcb4; border:1px solid #33200f; border-radius:5px;
+    padding:9px 16px; font-family:inherit; font-size:14.5px; letter-spacing:.05em; cursor:pointer; margin:4px 6px 4px 0; }
+  .wbtn:disabled { opacity:.45; cursor:default; }
+  .wbtn.ghost { background:transparent; color:#4a2f14; border:1px solid #6b4a2a; }
+  .panel input[type=text], .panel textarea { width:100%; background:rgba(255,250,235,.65); border:1px solid #8a6a3e;
+    border-radius:4px; padding:9px 10px; font-family:inherit; font-size:15px; color:#2f2213; margin:6px 0 10px; }
+  .panel textarea { min-height:74px; resize:vertical; }
+  .cat { margin:14px 0 4px; font-size:13px; letter-spacing:.18em; text-transform:uppercase; color:#7a5a32;
+    border-bottom:1px solid #b99a68; padding-bottom:3px; }
+  .catCard { position:relative; width:100%; aspect-ratio:16/5.5; margin:16px 0 6px; border:1px solid #6b4a2a;
+    border-radius:6px; background-size:cover; background-position:center 42%; box-shadow:0 4px 14px rgba(0,0,0,.35);
+    display:flex; align-items:flex-end; overflow:hidden; }
+  .catCard span { background:linear-gradient(rgba(20,12,5,0), rgba(20,12,5,.72) 55%); width:100%;
+    color:#f2e2b8; font-size:14px; letter-spacing:.2em; text-transform:uppercase; padding:22px 12px 8px;
+    text-shadow:0 2px 8px rgba(0,0,0,.9); }
+  .adv { display:inline-block; background:rgba(58,40,18,.09); border:1px solid #a98c5c; border-radius:4px;
+    padding:6px 11px; margin:4px 5px 2px 0; font-size:14px; cursor:pointer; }
+  .adv:hover { background:rgba(58,40,18,.18); }
+  .notice { background:rgba(58,40,18,.10); border-left:3px solid #7a5a32; padding:10px 12px; font-size:14px;
+    font-style:italic; margin:10px 0; }
+
+  /* current adventure card */
+  .advCard { border:1px solid #7a5a32; border-radius:6px; background:rgba(255,250,235,.5); padding:14px 16px; margin-bottom:14px; }
+  .advCard b { font-size:17px; color:#4a2f14; }
+
+  /* treasure polaroids */
+  #tGrid { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; }
+  .pol { background:#f6efdc; border:1px solid #b9a67d; padding:7px 7px 24px; box-shadow:0 3px 10px rgba(0,0,0,.35);
+    transform:rotate(-1.2deg); width:132px; }
+  .pol:nth-child(even){ transform:rotate(1.4deg); }
+  .pol img { width:100%; height:100px; object-fit:cover; display:block; }
+  .pol .cap { font-size:11.5px; color:#4a3a22; margin-top:6px; line-height:1.25; }
+  .pol .by { font-size:10px; color:#8a765a; font-style:italic; }
+
+  /* compass rose */
+  #roseWrap { display:flex; justify-content:center; margin:8px 0 14px; }
+  #needle { transition:transform 2.8s cubic-bezier(.2,.9,.25,1); transform-origin:60px 60px; transform-box:view-box; }
+
+  /* chaos panel variant */
+  .panel.dark { background:linear-gradient(#241a2e,#160f1e); color:#d9c8ec; border-color:#4a3468;
+    box-shadow:0 10px 44px rgba(0,0,0,.8), inset 0 0 60px rgba(120,60,200,.15); }
+  .panel.dark h2 { color:#c9a8f2; } .panel.dark .sub { color:#8f7cad; }
+  .panel.dark .closeX { background:#c9a8f2; color:#241a2e; border-color:#4a3468; }
+
+  /* first run */
+  #firstRun { position:fixed; inset:0; z-index:120; background:radial-gradient(ellipse at 50% 30%, #241708, #0d0803 75%);
+    display:none; align-items:center; justify-content:center; overflow-y:auto; }
+  #firstRun.open { display:flex; }
+  #frInner { text-align:center; padding:40px 20px; max-width:560px; }
+  #frInner img.emblem { width:min(300px,70vw); border-radius:8px; box-shadow:0 0 60px rgba(255,190,90,.18); margin-bottom:22px; }
+  #frInner h1 { color:#e8d9b5; font-size:clamp(22px,4vw,34px); letter-spacing:.12em; text-transform:uppercase; margin-bottom:6px; }
+  #frInner p { color:#b99a68; font-style:italic; margin-bottom:22px; }
+  .crewBtn { display:block; width:100%; margin:10px 0; background:linear-gradient(#ecdcb4,#d2b988); color:#3a2812;
+    border:1px solid #6b4a2a; border-radius:6px; padding:14px; font-family:inherit; font-size:17px; cursor:pointer; }
+  .crewBtn small { display:block; font-size:12.5px; font-style:italic; color:#7a5a32; margin-top:2px; }
+
+  #hint { position:fixed; bottom:10px; left:50%; transform:translateX(-50%); z-index:40; color:#cbb58a;
+    background:rgba(20,12,5,.7); border:1px solid rgba(180,140,80,.4); border-radius:14px; padding:5px 16px;
+    font-size:12.5px; font-style:italic; opacity:1; transition:opacity 1.5s; pointer-events:none; white-space:nowrap; }
+  #hint.gone { opacity:0; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="scene">
+    <img class="bg" src="art/concepts/hq-concept.png" alt="">
+    <div class="tintA"></div><div class="tintB"></div>
+    <div id="rolloIdle"></div>
+    <div id="lanternGlow"></div>
+    <div id="rolloFx"><span></span><span></span><span></span></div>
+    <div id="greet"><div id="greetName">Ahoy!</div><div id="greetTime"></div></div>
+    <div id="signFix"><b>ROLLO</b><span>Official Headquarters Guardian.<br>Happy at home.<br>Watching over our adventures. &hearts;</span></div>
+    <div id="bannerFix">ROLLO MAY STAY HOME, BUT HE NEVER MISSES A THING.</div>
+    <div id="boardLive"><div id="blTitle"></div><div id="blBody"></div></div>
+    <div id="chestLive"></div>
+    <div id="pennant"></div>
+    <div class="hs" id="hs-flag"></div><div class="hs" id="hs-rollo"></div><div class="hs" id="hs-board"></div>
+    <div class="hs" id="hs-chest"></div><div class="hs" id="hs-call"></div><div class="hs" id="hs-compass"></div>
+    <div class="hs" id="hs-lantern"></div><div class="hs" id="hs-chron"></div><div class="hs" id="hs-chaos"></div>
+    <div class="hs" id="hs-stone"></div><div class="hs" id="hs-crew"></div><div class="hs" id="hs-settings"></div>
+    <div class="hs" id="hs-idea"></div>
+  </div>
+</div>
+
+<div id="hsBanner">The island is watching&hellip;</div>
+<div id="proclaim"><span></span></div>
+<div id="hint">Tap objects. Drag to explore the whole Headquarters.</div>
+
+<div id="firstRun"><div id="frInner">
+  <img class="emblem" src="art/concepts/ansla-emblem.png" alt="The Colours of Ansla">
+  <h1>Escape from Ansla Island</h1>
+  <p id="frLead">Who steps ashore?</p>
+  <div id="frCrew"></div>
+  <div id="frMotif" style="display:none">
+    <p style="color:#e8d9b5; font-style:normal;">These are the Colours of Ansla.<br>They fly over Headquarters until new colours are earned.</p>
+    <button class="crewBtn" id="frHoist">Hoist the Colours</button>
+  </div>
+</div></div>
+
+<div class="veil" id="vBoard"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Adventure Board</h2>
+  <div class="sub">Our crew. Our rules. Our adventures.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vFlag"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Colours</h2>
+  <div class="sub">Raise them to call an adventure. Strike them when you return with a story.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vChest"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Treasure Chest</h2>
+  <div class="sub">Memories are our real treasure.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vStone"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Island Stone</h2>
+  <div class="sub">The stone interprets nature. It does not display data.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vCompass"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Navigate</h2>
+  <div class="sub">Find your way. Explore. Discover.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vChron"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Chronicle</h2>
+  <div class="sub">Record the tales. Keep the memories.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vChaos"><div class="panel dark">
+  <div class="closeX">&#10005;</div><h2>Chaos</h2>
+  <div class="sub">Unleash a bit of mischief.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vIdeas"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Plant an Idea</h2>
+  <div class="sub">Seeds for future adventures. Anyone may plant one.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vCall"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Call</h2>
+  <div class="sub">Listen for the drums&hellip;</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vCrew"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Crew</h2>
+  <div class="sub">Family is our crew. Adventure is our way.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vSettings"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Ship's Log &amp; Settings</h2>
+  <div class="sub">Quiet workings of the island.</div><div class="body"></div>
+</div></div>
+
+<input type="file" id="photoIn" accept="image/*" style="display:none">
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- CONFIG (always first) ---------- */
+var STORE_KEY = 'ansla.v1';
+var CREW = [
+  { id:'dadrew',  name:'Dadrew',  role:'The Captain' },
+  { id:'mumgela', name:'Mumgela', role:'The Mapmaker & Magic Keeper' },
+  { id:'theboy',  name:'The Boy', role:'First Mate & Explorer' }
+];
+var FUTURE_CREW = 'Milo, Cherub and BigJ will sign on when they reach the island.';
+var LIBRARY = {
+  'On the water': ['The tinny','SUP','Kayaking','Boogie boarding','River swimming','Fishing','Magnet fishing'],
+  'Trails and wilds': ['National park hike','Mountain trails','Beach walk','Moonlit walk','Cycling'],
+  'Wildlife': ['Dolphin spotting','Whale watching'],
+  'Sky and night': ['Stargazing','Astrophotography','Storm watching'],
+  'Fire and camp': ['Campfire','Camping'],
+  'Treasure hunting': ['Goldpanning','Fossicking','Antique hunting'],
+  'Big days out': ['Dreamworld','SEA LIFE'],
+  'Home ports': ['Movie night','Board games','Quiz night']
+};
+var STONE_LINES = {
+  dawn: ['The island wakes gold and quiet. First light belongs to the brave.',
+         'The tide has turned in the night. New sand, new stories.',
+         'Dew on the pandanus. The day has not decided what it is yet. You may decide for it.'],
+  day:  ['The sun stands tall. Water and shade will both be glad of you.',
+         'A fine wide day. Somewhere on the island, something is waiting to be found.',
+         'The island is loudest at noon, if you know how to listen.'],
+  dusk: ['The light turns to gold and the day tells its story. Walk out and hear the ending.',
+         'Fish rise at dusk. So do stories.',
+         'The lanterns will want lighting soon.'],
+  night:['The stars are out over Ansla. Some adventures only happen in the dark.',
+         'The moon keeps watch so the crew may wander.',
+         'Night on the island is not empty. It is full of things the day cannot show you.']
+};
+var STONE_SUGGEST = {
+  dawn: ['Beach walk','Fishing','Dolphin spotting','Kayaking'],
+  day:  ['River swimming','Boogie boarding','National park hike','SUP','The tinny','Fossicking'],
+  dusk: ['Beach walk','Fishing','Campfire','Storm watching'],
+  night:['Stargazing','Astrophotography','Moonlit walk','Movie night','Board games','Quiz night']
+};
+var CHAOS_LINES = [
+  'The crystal hums. It knows something you do not.',
+  'Not yet. But soon, and without warning.',
+  'A little chaos is being prepared. The island asks for patience.',
+  'The crystal flickers, considers you carefully, and dims again.'
+];
+var CHAOS_MISSIONS = [
+  'A stick on this adventure has been abducted by aliens. Find it and document its safe return.',
+  'Convince the crew something strange lives in these woods. A yowie, perhaps. Commit to it.',
+  'Prepare one innocent-looking snack with a surprising (edible!) twist and get a crew member to eat it.',
+  'Claim a completely ordinary rock is priceless treasure. Defend it beyond all reason.',
+  'Invent a solemn island tradition on the spot and get the whole crew to perform it.',
+  'Swap one item of someone’s gear for something ridiculous without being caught.',
+  'Narrate the crew like a nature documentary until somebody cracks.',
+  'Photograph a crew member mid-blink and declare it their official portrait.',
+  'Insist on a dramatic slow-motion walk for no reason. Recruit at least one other.',
+  'Hide a hand-drawn treasure map for the crew to find. It must lead to something silly.',
+  'Speak only in pirate for ten full minutes. Refuse to explain why.',
+  'Award an invisible medal to a crew member with a full ceremony and a speech.'
+];
+var GREETINGS = { dawn:'Good morning, Captain.', day:'Good day, Captain.', dusk:'Good evening, Captain.', night:'The stars keep watch, Captain.' };
+var WHEN_CHOICES = ['At first light','Midmorning','High sun','Golden hour','Under the stars','When the drums sound'];
+var CAT_ART = {
+  'On the water':'on_the_water', 'Trails and wilds':'trails_and_wilds', 'Wildlife':'wildlife',
+  'Sky and night':'sky_and_night', 'Fire and camp':'fire_and_camp', 'Treasure hunting':'treasure_hunting',
+  'Big days out':'big_days_out', 'Home ports':'home_ports'
+};
+var CAT_POS = { 'Home ports':'center 72%' };
+var IDLE_MIN = 20000, IDLE_MAX = 45000;
+var PHOTO_MAX_EDGE = 700, PHOTO_QUALITY = 0.7;
+
+/* ---------- STATE ---------- */
+function freshState(){
+  return { crew:{ currentMemberId:null }, motif:{ chosen:null, unlocked:['ansla-emblem'] },
+    flag:{ raised:false, adventure:null, raisedBy:null, raisedAt:null, joining:[] },
+    adventures:[], ideas:[], horizon:[], treasures:[], rewards:{ shanty:[], motifs:[], chaosChampions:[] }, chronicle:[],
+    chaos:{ deployed:false, deployedBy:null, missions:{} },
+    hideSeek:{ active:false }, stone:{}, compass:{}, settings:{ timeOverride:'auto' } };
+}
+var state;
+function load(){
+  try { var raw = localStorage.getItem(STORE_KEY); state = raw ? JSON.parse(raw) : freshState(); }
+  catch(e){ state = freshState(); }
+  /* migrate older saves */
+  if (!state.ideas) state.ideas = [];
+  if (!state.horizon) state.horizon = [];
+  if (!state.chaos) state.chaos = { deployed:false, deployedBy:null, missions:{} };
+  if (!state.rewards.chaosChampions) state.rewards.chaosChampions = [];
+}
+function allAboard(){
+  return state.flag.raised && CREW.every(function(c){ return state.flag.joining.indexOf(c.name) !== -1; });
+}
+function save(){
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); try { reflectScene(); } catch(e2){} return true; }
+  catch(e){ alert('The chest is full. The island cannot hold more just now (device storage limit). Older treasures may need to sail to the cloud in a later voyage.'); return false; }
+}
+function proclaim(text){
+  var p = $('proclaim'); if (!p) return;
+  p.querySelector('span').textContent = text;
+  p.classList.remove('show'); void p.offsetWidth; p.classList.add('show');
+  setTimeout(function(){ p.classList.remove('show'); }, 2300);
+}
+function catOf(title){
+  var found = null;
+  Object.keys(LIBRARY).forEach(function(cat){ if (LIBRARY[cat].indexOf(title) !== -1) found = cat; });
+  return found;
+}
+function catBanner(title){
+  var cat = catOf(title);
+  if (!cat || !CAT_ART[cat]) return '';
+  return '<div class="catCard" style="background-image:url(\'art/board/' + CAT_ART[cat] + '.jpg\')' +
+         (CAT_POS[cat] ? '; background-position:' + CAT_POS[cat] : '') + '"><span>' + esc(title) + '</span></div>';
+}
+function reflectScene(){
+  var pn = $('pennant'); if (pn) pn.classList.toggle('up', !!state.flag.raised);
+  var bl = $('boardLive');
+  if (bl){
+    var artCat = state.flag.raised ? catOf(state.flag.adventure) : (state.horizon.length ? catOf(state.horizon[0].title) : null);
+    if (artCat && CAT_ART[artCat]){
+      bl.classList.add('hasArt');
+      bl.style.backgroundImage = 'linear-gradient(rgba(12,7,3,.15), rgba(12,7,3,.68)), url(\'art/board/' + CAT_ART[artCat] + '.jpg\')';
+    } else {
+      bl.classList.remove('hasArt');
+      bl.style.backgroundImage = '';
+    }
+  }
+  var t = $('blTitle'), bb = $('blBody');
+  if (t && bb){
+    if (state.flag.raised){
+      t.textContent = state.flag.raisedBy + ' has RAISED THE COLOURS!';
+      bb.innerHTML = esc(state.flag.adventure) + (state.flag.when ? '<br>' + esc(state.flag.when) : '') +
+        '<br><small>' + state.flag.joining.length + ' joining: ' + esc(state.flag.joining.join(', ')) +
+        (state.chaos.deployed ? ' &middot; chaos is loose' : '') + '</small>' +
+        (state.horizon.length ? '<br><small>On the horizon: ' + esc(state.horizon[0].title) + (state.horizon.length > 1 ? ' +' + (state.horizon.length - 1) + ' more' : '') + '</small>' : '');
+    } else if (state.horizon.length){
+      t.textContent = 'The board is quiet.';
+      bb.innerHTML = 'No colours flying over Ansla.<br><small>On the horizon: ' +
+        esc(state.horizon[0].title) + (state.horizon[0].when ? ', ' + esc(state.horizon[0].when.toLowerCase()) : '') +
+        (state.horizon.length > 1 ? ' +' + (state.horizon.length - 1) + ' more' : '') + '</small>';
+    } else {
+      t.textContent = 'The board is quiet.';
+      bb.innerHTML = 'No colours flying over Ansla.<br><small>Tap the board to choose an adventure, or plant an idea below.</small>';
+    }
+  }
+  var cl = $('chestLive');
+  if (cl){
+    cl.innerHTML = '';
+    state.treasures.slice(-3).reverse().forEach(function(tr){
+      var d = document.createElement('div'); d.className = 'mini';
+      var im = document.createElement('img'); im.alt = ''; im.src = tr.imageRef;
+      d.appendChild(im); cl.appendChild(d);
+    });
+  }
+}
+function member(){ var m = CREW.filter(function(c){ return c.id === state.crew.currentMemberId; })[0]; return m || CREW[0]; }
+function $(id){ return document.getElementById(id); }
+function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+/* ---------- TIME OF DAY ---------- */
+function timeState(){
+  if (state.settings.timeOverride && state.settings.timeOverride !== 'auto') return state.settings.timeOverride;
+  var h = new Date().getHours() + new Date().getMinutes()/60;
+  if (h >= 5 && h < 8) return 'dawn';
+  if (h >= 8 && h < 16.5) return 'day';
+  if (h >= 16.5 && h < 19.5) return 'dusk';
+  return 'night';
+}
+function applyTime(){
+  var t = timeState();
+  var sc = $('scene');
+  sc.className = 't-' + t;
+  $('greetTime').textContent = GREETINGS[t];
+  $('greetName').textContent = 'Ahoy, ' + member().name + '!';
+}
+
+/* ---------- SCENE FIT & DRAG (auto-fits and recentres on any rotate/resize) ---------- */
+var offX = 0, offY = 0, minX = 0, minY = 0, dragging = false, moved = 0;
+var startX = 0, startY = 0, startOffX = 0, startOffY = 0, IMG_RATIO = 1.5;
+function applyOffset(){ $('scene').style.transform = 'translate(' + offX + 'px,' + offY + 'px)'; }
+function layout(){
+  var stage = $('stage'), img = document.querySelector('#scene img.bg'), sc = $('scene');
+  if (img.naturalWidth) IMG_RATIO = img.naturalWidth / img.naturalHeight;
+  var vw = stage.clientWidth, vh = stage.clientHeight, w, h;
+  if (vw / vh > IMG_RATIO){ w = vw; h = Math.round(vw / IMG_RATIO); }
+  else { h = vh; w = Math.round(vh * IMG_RATIO); }
+  img.style.width = w + 'px'; img.style.height = h + 'px';
+  sc.style.width = w + 'px'; sc.style.height = h + 'px';
+  minX = Math.min(0, vw - w); minY = Math.min(0, vh - h);
+  offX = Math.max(minX, Math.min(0, (vw - w) / 2));
+  offY = Math.max(minY, Math.min(0, (vh - h) / 2));
+  applyOffset();
+}
+function bindDrag(){
+  var stage = $('stage');
+  stage.addEventListener('pointerdown', function(e){
+    dragging = true; moved = 0; startX = e.clientX; startY = e.clientY;
+    startOffX = offX; startOffY = offY; stage.classList.add('dragging');
+  });
+  window.addEventListener('pointermove', function(e){
+    if (!dragging) return;
+    var dx = e.clientX - startX, dy = e.clientY - startY;
+    moved = Math.max(moved, Math.abs(dx), Math.abs(dy));
+    offX = Math.max(minX, Math.min(0, startOffX + dx));
+    offY = Math.max(minY, Math.min(0, startOffY + dy));
+    applyOffset();
+  });
+  window.addEventListener('pointerup', function(){ dragging = false; stage.classList.remove('dragging'); });
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function(){ setTimeout(layout, 250); });
+}
+function wasDrag(){ return moved > 8; }
+
+/* ---------- RIPPLE ---------- */
+function ripple(e){
+  var r = document.createElement('div'); r.className = 'ripple';
+  var rect = $('scene').getBoundingClientRect();
+  r.style.left = (e.clientX - rect.left) + 'px'; r.style.top = (e.clientY - rect.top) + 'px';
+  $('scene').appendChild(r); setTimeout(function(){ r.remove(); }, 750);
+}
+
+/* ---------- PANEL PLUMBING ---------- */
+function openV(id){ $(id).classList.add('open'); }
+function closeV(id){ $(id).classList.remove('open'); }
+function closeAll(){ document.querySelectorAll('.veil.open').forEach(function(v){ v.classList.remove('open'); }); }
+function body(id){ return document.querySelector('#' + id + ' .body'); }
+
+/* ---------- ADVENTURE BOARD ---------- */
+function raiseColours(title, when){
+  state.flag = { raised:true, adventure:title, when:when || '', raisedBy:member().name,
+                 raisedAt:new Date().toISOString(), joining:[member().name] };
+  state.chaos = { deployed:false, deployedBy:null, missions:{} };
+  save(); closeAll();
+  proclaim('The Colours Are Raised');
+  var bl = $('boardLive'); if (bl){ bl.classList.remove('pop'); void bl.offsetWidth; bl.classList.add('pop'); }
+}
+function horizonHtml(){
+  if (!state.horizon.length) return '';
+  var h = '<div class="cat">On the horizon</div>';
+  state.horizon.forEach(function(hz, i){
+    h += '<div class="advCard"><b style="font-size:15px;">' + esc(hz.title) + '</b>' +
+      (hz.when ? ' <span style="font-size:13px; color:#7a5a32;">&middot; ' + esc(hz.when) + '</span>' : '') +
+      '<br><span style="font-size:12px; color:#8a765a; font-style:italic;">charted by ' + esc(hz.chartedBy) + '</span><br>' +
+      (state.flag.raised ? '' : '<button class="wbtn hzHoist" data-i="' + i + '" style="margin-top:8px; font-size:13px;">Hoist the Colours</button>') +
+      '<button class="wbtn ghost hzDrop" data-i="' + i + '" style="margin-top:8px; font-size:13px;">Let it drift</button></div>';
+  });
+  return h;
+}
+function wireHorizon(scope){
+  scope.querySelectorAll('.hzHoist').forEach(function(el){
+    el.onclick = function(){
+      var h = state.horizon.splice(parseInt(el.getAttribute('data-i'), 10), 1)[0];
+      if (h) raiseColours(h.title, h.when);
+    };
+  });
+  scope.querySelectorAll('.hzDrop').forEach(function(el){
+    el.onclick = function(){ state.horizon.splice(parseInt(el.getAttribute('data-i'), 10), 1); save(); openBoard(); };
+  });
+}
+function openBoard(){
+  var b = body('vBoard'); b.innerHTML = '';
+  var html = '';
+  if (state.flag.raised){
+    var joined = state.flag.joining.indexOf(member().name) !== -1;
+    html += catBanner(state.flag.adventure) +
+      '<div class="advCard"><b>' + esc(state.flag.raisedBy) + ' has RAISED THE COLOURS!</b><br>' +
+      esc(state.flag.adventure) + (state.flag.when ? '<br>' + esc(state.flag.when) : '') +
+      '<br><span style="font-size:13px;color:#7a5a32;">' + state.flag.joining.length + ' joining: ' + esc(state.flag.joining.join(', ')) + '</span></div>' +
+      '<button class="wbtn" id="bJoin"' + (joined ? ' disabled' : '') + '>' + (joined ? 'You are aboard' : "I'm going, is anyone coming? Count me in!") + '</button>' +
+      '<div class="notice">When the crew returns, strike the colours at the flagpole and log the story. Fancy something after? Chart it on the horizon below.</div>';
+  } else if (!state.horizon.length){
+    html += '<div class="notice">No colours flying. Choose an adventure and raise them, or chart one for the horizon.</div>';
+  }
+  html += horizonHtml();
+  Object.keys(LIBRARY).forEach(function(cat){
+    if (CAT_ART[cat]) html += '<div class="catCard" style="background-image:url(\'art/board/' + CAT_ART[cat] + '.jpg\')' + (CAT_POS[cat] ? '; background-position:' + CAT_POS[cat] : '') + '"><span>' + esc(cat) + '</span></div>';
+    else html += '<div class="cat">' + esc(cat) + '</div>';
+    LIBRARY[cat].forEach(function(a){ html += '<span class="adv" data-a="' + esc(a) + '">' + esc(a) + '</span>'; });
+  });
+  html += '<div id="raiseForm" style="display:none; margin-top:16px;">' +
+    '<div class="advCard"><b id="rfName"></b></div>' +
+    '<p style="font-size:13.5px; color:#7a5a32; margin:4px 0;">When do we sail?</p>' +
+    '<div id="rfWhenRow"></div>' +
+    (state.flag.raised ? '' : '<button class="wbtn" id="rfGo" style="margin-top:10px;">Raise the Colours</button>') +
+    '<button class="wbtn ghost" id="rfChart" style="margin-top:10px;">Chart it on the horizon</button>' +
+    '<button class="wbtn ghost" id="rfNo">Not this one</button></div>';
+  b.innerHTML = html;
+  if ($('bJoin')) $('bJoin').onclick = function(){
+    if (state.flag.joining.indexOf(member().name) === -1){ state.flag.joining.push(member().name); save(); }
+    openBoard();
+  };
+  wireHorizon(b);
+  var chosen = null, whenPick = '';
+  var wr = $('rfWhenRow');
+  WHEN_CHOICES.forEach(function(w){
+    var ch = document.createElement('span');
+    ch.className = 'whenChip'; ch.textContent = w;
+    ch.onclick = function(){
+      whenPick = w;
+      wr.querySelectorAll('.whenChip').forEach(function(x){ x.classList.remove('sel'); });
+      ch.classList.add('sel');
+    };
+    wr.appendChild(ch);
+  });
+  b.querySelectorAll('.adv').forEach(function(el){
+    el.onclick = function(){
+      chosen = el.getAttribute('data-a');
+      $('rfName').textContent = chosen;
+      $('raiseForm').style.display = 'block';
+      $('raiseForm').scrollIntoView({ behavior:'smooth', block:'nearest' });
+    };
+  });
+  if ($('rfGo')) $('rfGo').onclick = function(){ if (chosen) raiseColours(chosen, whenPick); };
+  $('rfChart').onclick = function(){
+    if (!chosen) return;
+    state.horizon.push({ title:chosen, when:whenPick, chartedBy:member().name, chartedAt:new Date().toISOString() });
+    save(); openBoard();
+  };
+  $('rfNo').onclick = function(){ chosen = null; $('raiseForm').style.display = 'none'; };
+  openV('vBoard');
+}
+
+/* ---------- FLAG ---------- */
+function openFlag(){
+  var b = body('vFlag'); b.innerHTML = '';
+  if (!state.flag.raised){
+    b.innerHTML = '<div class="notice">The colours are stowed. The Adventure Board is where they rise.</div>' +
+      '<button class="wbtn" id="fToBoard">To the Board</button>';
+    $('fToBoard').onclick = function(){ closeV('vFlag'); openBoard(); };
+  } else {
+    b.innerHTML = catBanner(state.flag.adventure) +
+      '<div class="advCard"><b>' + esc(state.flag.adventure) + '</b>' + (state.flag.when ? '<br>' + esc(state.flag.when) : '') +
+      '<br><span style="font-size:13px;color:#7a5a32;">Raised by ' + esc(state.flag.raisedBy) + ' &middot; crew aboard: ' + esc(state.flag.joining.join(', ')) + '</span></div>' +
+      '<button class="wbtn" id="fStrike">Strike the Colours (we are home)</button>' +
+      '<div id="logForm" style="display:none; margin-top:14px;">' +
+        '<div class="cat">Log the adventure</div>' +
+        '<p style="font-size:14px; margin:8px 0;">Who won the day? The winner writes the next line of the shanty.</p>' +
+        '<div id="winnerRow"></div>' +
+        '<input type="text" id="shantyLine" class="scrollInput" placeholder="The next line of our shanty (winner’s words)&hellip;">' +
+        (state.chaos.deployed ?
+          '<p style="font-size:14px; margin:8px 0;">Chaos was loose out there. The crew votes: who was <b>Chaos Champion</b>?</p><div id="champRow"></div>'
+          : '') +
+        '<textarea id="chronNote" class="journal" placeholder="A few words for the Chronicle: what happened out there?"></textarea>' +
+        '<button class="wbtn" id="fLog">Seal it in the Chronicle</button>' +
+      '</div>';
+    $('fStrike').onclick = function(){
+      $('fStrike').style.display = 'none';
+      $('logForm').style.display = 'block';
+      var winner = null, champ = null;
+      function pickRow(rowEl, mark, setter){
+        CREW.forEach(function(c){
+          var btn = document.createElement('button');
+          btn.className = 'pickChip'; btn.textContent = c.name;
+          btn.onclick = function(){
+            setter(c.name);
+            rowEl.querySelectorAll('.pickChip').forEach(function(x){ x.className = 'pickChip'; x.textContent = x.textContent.replace(mark + ' ', ''); });
+            btn.className = 'pickChip sel'; btn.textContent = mark + ' ' + c.name;
+          };
+          rowEl.appendChild(btn);
+        });
+      }
+      pickRow($('winnerRow'), '⚔', function(n){ winner = n; });
+      if ($('champRow')) pickRow($('champRow'), '★', function(n){ champ = n; });
+      $('fLog').onclick = function(){
+        var line = $('shantyLine').value.trim();
+        var note = $('chronNote').value.trim();
+        var hadChaos = state.chaos.deployed;
+        state.adventures.push({ title:state.flag.adventure, when:state.flag.when, joining:state.flag.joining,
+          raisedBy:state.flag.raisedBy, status:'completed', completedAt:new Date().toISOString(),
+          chaos:hadChaos, chaosChampion:champ || null });
+        if (line) state.rewards.shanty.push({ line:line, author:winner || member().name, date:new Date().toISOString() });
+        if (hadChaos && champ) state.rewards.chaosChampions.push({ name:champ, adventure:state.flag.adventure, date:new Date().toISOString() });
+        if (note) state.chronicle.push({ entry:note, author:member().name, date:new Date().toISOString() });
+        state.flag = { raised:false, adventure:null, when:null, raisedBy:null, raisedAt:null, joining:[] };
+        state.chaos = { deployed:false, deployedBy:null, missions:{} };
+        save();
+        proclaim('The Colours Are Struck');
+        var nxt = state.horizon[0];
+        b.innerHTML = '<div class="notice">The colours are struck, the story is kept. ' +
+          (line ? 'The shanty grows a line longer. ' : 'The shanty waits for a braver day. ') +
+          (hadChaos && champ ? esc(champ) + ' is crowned Chaos Champion.' : '') + '</div>' +
+          (nxt ? '<div class="advCard"><b>' + esc(nxt.title) + '</b>' + (nxt.when ? ' <span style="font-size:13px; color:#7a5a32;">&middot; ' + esc(nxt.when) + '</span>' : '') +
+                 '<br><span style="font-size:13px; font-style:italic; color:#8a765a;">waits on the horizon.</span></div>' +
+                 '<button class="wbtn" id="fNext">Hoist the Colours for it</button>' : '');
+        if (nxt) $('fNext').onclick = function(){
+          var h = state.horizon.shift();
+          if (h) raiseColours(h.title, h.when);
+        };
+      };
+    };
+  }
+  openV('vFlag');
+}
+
+/* ---------- TREASURE CHEST ---------- */
+var pendingPhoto = null;
+function openChest(){
+  var b = body('vChest');
+  var html = '<button class="wbtn" id="tAdd">Add a treasure</button>' +
+    '<div id="tForm" style="display:none;">' +
+      '<div class="devWrap"><div class="devPol"><img id="devImg" alt="">' +
+      '<input type="text" id="tCap" placeholder="what is this memory?"></div></div>' +
+      '<div style="text-align:center;"><button class="wbtn" id="tSave">Into the chest</button></div>' +
+    '</div><div id="tGrid"></div>';
+  if (!state.treasures.length) html += '<div class="notice">The chest waits for its first memory. Go and make one.</div>';
+  b.innerHTML = html;
+  var grid = $('tGrid');
+  state.treasures.slice().reverse().forEach(function(t){
+    var d = document.createElement('div'); d.className = 'pol';
+    d.innerHTML = '<img alt=""><div class="cap"></div><div class="by"></div>';
+    d.querySelector('img').src = t.imageRef;
+    d.querySelector('.cap').textContent = t.caption || '';
+    d.querySelector('.by').textContent = t.addedBy + ' · ' + new Date(t.addedAt).toLocaleDateString();
+    grid.appendChild(d);
+  });
+  pendingPhoto = null;
+  $('tAdd').onclick = function(){ $('photoIn').value = ''; $('photoIn').click(); };
+  $('tSave').onclick = function(){
+    if (!pendingPhoto) return;
+    state.treasures.push({ imageRef:pendingPhoto, caption:$('tCap').value.trim(), addedBy:member().name, addedAt:new Date().toISOString() });
+    if (save()) openChest();
+  };
+  openV('vChest');
+}
+function bindPhotoInput(){
+  $('photoIn').addEventListener('change', function(){
+    var f = $('photoIn').files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var sc = Math.min(1, PHOTO_MAX_EDGE / Math.max(img.width, img.height));
+        var cv = document.createElement('canvas');
+        cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        pendingPhoto = cv.toDataURL('image/jpeg', PHOTO_QUALITY);
+        var tf = $('tForm');
+        if (tf){
+          tf.style.display = 'block';
+          var dv = $('devImg');
+          if (dv){ dv.style.animation = 'none'; void dv.offsetWidth; dv.style.animation = ''; dv.src = pendingPhoto; }
+        }
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+  });
+}
+
+/* ---------- ISLAND STONE ---------- */
+function openStone(){
+  var t = timeState();
+  var lines = STONE_LINES[t];
+  var line = lines[Math.floor(Math.random() * lines.length)];
+  var sugg = STONE_SUGGEST[t][Math.floor(Math.random() * STONE_SUGGEST[t].length)];
+  body('vStone').innerHTML =
+    '<div class="notice" style="font-size:16px;">' + esc(line) + '</div>' +
+    '<p style="margin:14px 0 6px;">The runes glow and settle on a thought:</p>' +
+    '<div class="advCard"><b>' + esc(sugg) + '</b></div>' +
+    '<button class="wbtn" id="sRaise">Raise the Colours for it</button>' +
+    '<p class="sub" style="margin-top:16px;">The Stone speaks from old wisdom for now. One day it will read the sky, the tides, the whales and the weather itself.</p>';
+  $('sRaise').onclick = function(){ raiseColours(sugg, ''); };
+  openV('vStone');
+}
+
+/* ---------- COMPASS ---------- */
+var DIRS = [['North','the wild horizon'],['North-east','the morning water'],['East','the rising sun'],['South-east','the river mouth'],
+            ['South','the old mountain'],['South-west','the deep forest'],['West','the setting sun'],['North-west','the far headland']];
+function openCompass(){
+  body('vCompass').innerHTML =
+    '<div id="roseWrap"><svg width="150" height="150" viewBox="0 0 120 120">' +
+    '<circle cx="60" cy="60" r="56" fill="#1e2b45" stroke="#c9a86a" stroke-width="2.5"/>' +
+    '<circle cx="60" cy="60" r="44" fill="none" stroke="#8fa3c9" stroke-width=".7" opacity=".6"/>' +
+    '<text x="60" y="16" fill="#e8d9b5" font-size="11" text-anchor="middle">N</text>' +
+    '<text x="60" y="112" fill="#8fa3c9" font-size="10" text-anchor="middle">S</text>' +
+    '<text x="109" y="64" fill="#8fa3c9" font-size="10" text-anchor="middle">E</text>' +
+    '<text x="11" y="64" fill="#8fa3c9" font-size="10" text-anchor="middle">W</text>' +
+    '<polygon id="needle" points="60,22 65,60 60,74 55,60" fill="#e05a4e" stroke="#e8d9b5" stroke-width=".8"/>' +
+    '</svg></div><p id="cWord" style="text-align:center; font-style:italic; min-height:44px;"></p>' +
+    '<p class="sub" style="text-align:center;">One day this needle will be real, and you will carry it on adventures.</p>';
+  var pick = DIRS[Math.floor(Math.random() * DIRS.length)];
+  var deg = 720 + DIRS.indexOf(pick) * 45;
+  setTimeout(function(){
+    var n = $('needle'); if (n) n.style.transform = 'rotate(' + deg + 'deg)';
+    setTimeout(function(){
+      var w = $('cWord'); if (w) w.textContent = 'The needle settles ' + pick[0].toLowerCase() + ', toward ' + pick[1] + '. What waits there?';
+    }, 2600);
+  }, 250);
+  openV('vCompass');
+}
+
+/* ---------- CHRONICLE ---------- */
+function openChron(){
+  var b = body('vChron');
+  var html = '<textarea id="chNew" class="journal" placeholder="Add to the Chronicle, ' + esc(member().name) + '…"></textarea>' +
+    '<button class="wbtn" id="chSave">Record it</button>';
+  html += '<div class="cat">The tales</div>';
+  if (!state.chronicle.length && !state.adventures.length) html += '<div class="notice">The Chronicle is unwritten. The first tale is always the hardest to start and the best to remember.</div>';
+  state.chronicle.slice().reverse().forEach(function(c){
+    html += '<div class="advCard"><span class="entryHand">' + esc(c.entry) + '</span><br>' +
+      '<span style="font-size:12px; color:#8a765a; font-style:italic;">' + esc(c.author) + ' · ' + new Date(c.date).toLocaleDateString() + '</span></div>';
+  });
+  if (state.adventures.length){
+    html += '<div class="cat">Adventures completed: ' + state.adventures.length + '</div>';
+    state.adventures.slice().reverse().forEach(function(a){
+      html += '<div style="font-size:13.5px; margin:4px 0;">&#9873; ' + esc(a.title) + ' · ' + new Date(a.completedAt).toLocaleDateString() + '</div>';
+    });
+  }
+  if (state.rewards.chaosChampions.length){
+    html += '<div class="cat">Chaos Champions</div>';
+    state.rewards.chaosChampions.slice().reverse().forEach(function(cc){
+      html += '<div style="font-size:13.5px; margin:4px 0;">&#9733; ' + esc(cc.name) + ' &middot; ' + esc(cc.adventure) + ' &middot; ' + new Date(cc.date).toLocaleDateString() + '</div>';
+    });
+  }
+  html += '<div class="cat">The Shanty of Ansla</div>';
+  if (!state.rewards.shanty.length){
+    html += '<div class="notice">The song awaits its first line. Win the day on an adventure and write it.</div>';
+  } else {
+    state.rewards.shanty.forEach(function(s){
+      html += '<div style="font-style:italic; margin:5px 0; font-size:15px;">&ldquo;' + esc(s.line) + '&rdquo; <span style="font-size:11.5px; color:#8a765a;">' + esc(s.author) + '</span></div>';
+    });
+  }
+  b.innerHTML = html;
+  $('chSave').onclick = function(){
+    var v = $('chNew').value.trim(); if (!v) return;
+    state.chronicle.push({ entry:v, author:member().name, date:new Date().toISOString() });
+    save(); openChron();
+  };
+  openV('vChron');
+}
+
+/* ---------- CHAOS ---------- */
+function openChaos(){
+  var b = body('vChaos');
+  if (!state.flag.raised){
+    b.innerHTML = '<div style="text-align:center; padding:14px 4px;"><p style="font-size:17px; font-style:italic;">' +
+      esc(CHAOS_LINES[Math.floor(Math.random() * CHAOS_LINES.length)]) + '</p>' +
+      '<p style="font-size:13px; color:#8f7cad; margin-top:14px;">It wakes only when the colours fly and every crew member is aboard.</p></div>';
+  } else if (!allAboard()){
+    var missing = CREW.filter(function(c){ return state.flag.joining.indexOf(c.name) === -1; })
+                      .map(function(c){ return c.name; }).join(' and ');
+    b.innerHTML = '<div style="text-align:center; padding:14px 4px;"><p style="font-size:17px; font-style:italic;">The crystal stirs&hellip; but waits for the whole crew.</p>' +
+      '<p style="font-size:13.5px; color:#8f7cad; margin-top:12px;">' + esc(missing) + ' ' + (missing.indexOf(' and ') !== -1 ? 'have' : 'has') + ' not yet joined the adventure.</p></div>';
+  } else if (!state.chaos.deployed){
+    b.innerHTML = '<div style="text-align:center; padding:10px 4px;">' +
+      '<p style="font-size:18px; letter-spacing:.08em;">THE CRYSTAL IS LIVE.</p>' +
+      '<p style="font-size:14px; font-style:italic; color:#8f7cad; margin:12px 0 18px;">All crew aboard. One touch, and every member of this crew receives a secret mission. Evidence goes in the Treasure Chest. The crew votes a Chaos Champion when the colours are struck.</p>' +
+      '<button class="wbtn" id="xGo" style="background:#4a2a72; border-color:#2a1444;">Unleash the chaos</button></div>';
+    $('xGo').onclick = function(){
+      var pool = CHAOS_MISSIONS.slice();
+      var missions = {};
+      CREW.forEach(function(c){
+        var i = Math.floor(Math.random() * pool.length);
+        missions[c.id] = pool.splice(i, 1)[0];
+      });
+      state.chaos = { deployed:true, deployedBy:member().name, missions:missions, deployedAt:new Date().toISOString() };
+      save(); openChaos();
+    };
+  } else {
+    b.innerHTML = '<div style="padding:6px 2px;">' +
+      '<p style="font-size:12.5px; letter-spacing:.14em; color:#8f7cad; text-transform:uppercase;">Chaos was unleashed by ' + esc(state.chaos.deployedBy) + '</p>' +
+      '<p style="margin:14px 0 6px; font-size:15px;">Your secret mission, ' + esc(member().name) + '. Yours alone. Tell no one:</p>' +
+      '<div style="border:1px solid #4a3468; border-radius:6px; background:rgba(120,60,200,.10); padding:14px 16px; font-size:16px; font-style:italic;">' +
+      esc(state.chaos.missions[member().id] || 'The crystal has nothing for you. Suspicious in itself.') + '</div>' +
+      '<p style="font-size:13px; color:#8f7cad; margin-top:14px;">Evidence in the Treasure Chest. The crew votes the Chaos Champion when the colours are struck.</p></div>';
+  }
+  openV('vChaos');
+}
+
+/* ---------- PLANT AN IDEA ---------- */
+function openIdeas(){
+  var b = body('vIdeas');
+  var html = '<input type="text" id="idNew" placeholder="Poker night? Sunday BBQ? Plant it&hellip;">' +
+    '<button class="wbtn" id="idPlant">Plant it</button>';
+  if (!state.ideas.length) html += '<div class="notice">Nothing planted yet. Ideas grow into adventures here.</div>';
+  else html += '<div class="cat">Growing on the board</div>';
+  state.ideas.slice().reverse().forEach(function(idea, ri){
+    var realIdx = state.ideas.length - 1 - ri;
+    html += '<div class="advCard"><b style="font-size:15px;">' + esc(idea.text) + '</b><br>' +
+      '<span style="font-size:12px; color:#8a765a; font-style:italic;">planted by ' + esc(idea.plantedBy) + ' · ' + new Date(idea.plantedAt).toLocaleDateString() + '</span><br>' +
+      '<button class="wbtn ghost idGrow" data-i="' + realIdx + '" style="margin-top:8px; font-size:13px;">' +
+      (state.flag.raised ? 'Chart it on the horizon' : 'Raise the Colours for it') + '</button>' +
+      '</div>';
+  });
+  b.innerHTML = html;
+  $('idPlant').onclick = function(){
+    var v = $('idNew').value.trim(); if (!v) return;
+    state.ideas.push({ text:v, plantedBy:member().name, plantedAt:new Date().toISOString() });
+    save(); openIdeas();
+  };
+  b.querySelectorAll('.idGrow').forEach(function(el){
+    el.onclick = function(){
+      var idea = state.ideas[parseInt(el.getAttribute('data-i'), 10)];
+      if (!idea) return;
+      if (state.flag.raised){
+        state.horizon.push({ title:idea.text, when:'', chartedBy:member().name, chartedAt:new Date().toISOString() });
+        save(); openIdeas();
+      } else {
+        raiseColours(idea.text, '');
+      }
+    };
+  });
+  openV('vIdeas');
+}
+
+/* ---------- THE CALL ---------- */
+function openCall(){
+  body('vCall').innerHTML = state.flag.raised
+    ? '<div class="notice">The colours are raised! One day the drums will sound on every crew member’s phone the moment this happens. For now, word travels the old way.</div>'
+    : '<div class="notice">The drums are quiet. They sound when the colours are raised, and one voyage soon, they will reach the whole crew wherever they roam.</div>';
+  openV('vCall');
+}
+
+/* ---------- CREW ---------- */
+function openCrew(){
+  var b = body('vCrew'); b.innerHTML = '';
+  CREW.forEach(function(c){
+    var d = document.createElement('button');
+    d.className = 'crewBtn'; d.style.margin = '8px 0';
+    d.innerHTML = esc(c.name) + (c.id === state.crew.currentMemberId ? ' &#10004;' : '') + '<small>' + esc(c.role) + '</small>';
+    d.onclick = function(){ state.crew.currentMemberId = c.id; save(); applyTime(); openCrew(); };
+    b.appendChild(d);
+  });
+  var note = document.createElement('div'); note.className = 'notice'; note.textContent = FUTURE_CREW;
+  b.appendChild(note);
+  openV('vCrew');
+}
+
+/* ---------- SETTINGS ---------- */
+function openSettings(){
+  var b = body('vSettings');
+  b.innerHTML = '<div class="cat">Light on the island</div>' +
+    '<p style="font-size:13.5px; margin:6px 0;">The island follows the real sky. Override it to preview:</p><div id="todRow"></div>' +
+    '<div class="cat">Danger below decks</div>' +
+    '<button class="wbtn ghost" id="sgReset">Begin again (wipes everything)</button>' +
+    '<p class="sub" style="margin-top:14px;">Escape from Ansla Island &middot; Voyage I mock-up &middot; nothing leaves this device.</p>';
+  var row = $('todRow');
+  ['auto','dawn','day','dusk','night'].forEach(function(t){
+    var btn = document.createElement('button');
+    btn.className = (state.settings.timeOverride === t) ? 'wbtn' : 'wbtn ghost';
+    btn.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+    btn.onclick = function(){ state.settings.timeOverride = t; save(); applyTime(); openSettings(); };
+    row.appendChild(btn);
+  });
+  var armed = false;
+  $('sgReset').onclick = function(){
+    if (!armed){ armed = true; $('sgReset').textContent = 'Truly? All tales, treasures and the shanty will sink. Tap again to be sure.'; return; }
+    localStorage.removeItem(STORE_KEY); location.reload();
+  };
+  openV('vSettings');
+}
+
+/* ---------- ROLLO ---------- */
+function rolloBark(){
+  var fx = $('rolloFx');
+  fx.classList.remove('bark'); void fx.offsetWidth; fx.classList.add('bark');
+}
+function rolloIdleLoop(){
+  setTimeout(function(){
+    var g = $('rolloIdle'); g.classList.add('on');
+    setTimeout(function(){ g.classList.remove('on'); }, 2200);
+    rolloIdleLoop();
+  }, IDLE_MIN + Math.random() * (IDLE_MAX - IDLE_MIN));
+}
+
+/* ---------- LANTERN / HIDE & SEEK ---------- */
+function toggleLantern(){
+  state.hideSeek.active = !state.hideSeek.active;
+  if (state.hideSeek.active) state.hideSeek.startedAt = new Date().toISOString();
+  save(); reflectLantern();
+}
+function reflectLantern(){
+  $('lanternGlow').classList.toggle('on', !!state.hideSeek.active);
+  $('hsBanner').classList.toggle('show', !!state.hideSeek.active);
+}
+
+/* ---------- FIRST RUN ---------- */
+function firstRun(){
+  var fr = $('firstRun'); fr.classList.add('open');
+  var wrap = $('frCrew'); wrap.innerHTML = '';
+  CREW.forEach(function(c){
+    var btn = document.createElement('button');
+    btn.className = 'crewBtn';
+    btn.innerHTML = esc(c.name) + '<small>' + esc(c.role) + '</small>';
+    btn.onclick = function(){
+      state.crew.currentMemberId = c.id;
+      $('frLead').style.display = 'none'; wrap.style.display = 'none';
+      $('frMotif').style.display = 'block';
+    };
+    wrap.appendChild(btn);
+  });
+  $('frHoist').onclick = function(){
+    state.motif.chosen = 'ansla-emblem';
+    save(); fr.classList.remove('open'); applyTime();
+  };
+}
+
+/* ---------- WIRING ---------- */
+function bindHotspot(id, fn){
+  $(id).addEventListener('click', function(e){
+    if (wasDrag()) return;
+    ripple(e); setTimeout(fn, 160);
+  });
+}
+function init(){
+  load();
+  layout(); bindDrag(); bindPhotoInput();
+  document.querySelector('#scene img.bg').addEventListener('load', layout);
+  applyTime(); reflectLantern(); reflectScene();
+  setInterval(applyTime, 60000);
+  bindHotspot('hs-board', openBoard);
+  bindHotspot('hs-flag', openFlag);
+  bindHotspot('hs-chest', openChest);
+  bindHotspot('hs-stone', openStone);
+  bindHotspot('hs-compass', openCompass);
+  bindHotspot('hs-chron', openChron);
+  bindHotspot('hs-chaos', openChaos);
+  bindHotspot('hs-call', openCall);
+  bindHotspot('hs-crew', openCrew);
+  bindHotspot('hs-settings', openSettings);
+  bindHotspot('hs-lantern', toggleLantern);
+  bindHotspot('hs-idea', openIdeas);
+  $('hs-rollo').addEventListener('click', function(){ if (!wasDrag()) rolloBark(); });
+  document.querySelectorAll('.veil .closeX').forEach(function(x){
+    x.onclick = function(){ x.closest('.veil').classList.remove('open'); };
+  });
+  document.querySelectorAll('.veil').forEach(function(v){
+    v.addEventListener('click', function(e){ if (e.target === v) v.classList.remove('open'); });
+  });
+  window.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAll(); });
+  rolloIdleLoop();
+  setTimeout(function(){ $('hint').classList.add('gone'); }, 6000);
+  if (!state.crew.currentMemberId || !state.motif.chosen) firstRun();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+</body>
+</html>

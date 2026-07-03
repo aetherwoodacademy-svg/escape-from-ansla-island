@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ansla Island">
+<meta name="theme-color" content="#120c06">
+<link rel="apple-touch-icon" href="art/concepts/ansla-emblem.png">
+<title>Escape from Ansla Island</title>
+<link rel="stylesheet" href="css/headquarters.css">
+</head>
+<body>
+
+<div id="stage">
+  <div id="scene">
+    <img class="bg" src="art/concepts/hq-concept.png" alt="">
+    <div class="tintA"></div><div class="tintB"></div>
+    <div id="rolloIdle"></div>
+    <div id="lanternGlow"></div>
+    <div id="rolloFx"><span></span><span></span><span></span></div>
+    <div id="greet"><div id="greetName">Ahoy!</div><div id="greetTime"></div></div>
+    <div id="signFix"><b>ROLLO</b><span>Official Headquarters Guardian.<br>Happy at home.<br>Watching over our adventures. &hearts;</span></div>
+    <div id="bannerFix">ROLLO MAY STAY HOME, BUT HE NEVER MISSES A THING.</div>
+    <div id="boardLive"><div id="blTitle"></div><div id="blBody"></div></div>
+    <div id="chestLive"></div>
+    <div id="pennant"></div>
+    <div class="hs" id="hs-flag"></div><div class="hs" id="hs-rollo"></div><div class="hs" id="hs-board"></div>
+    <div class="hs" id="hs-chest"></div><div class="hs" id="hs-call"></div><div class="hs" id="hs-compass"></div>
+    <div class="hs" id="hs-lantern"></div><div class="hs" id="hs-chron"></div><div class="hs" id="hs-chaos"></div>
+    <div class="hs" id="hs-stone"></div><div class="hs" id="hs-crew"></div><div class="hs" id="hs-settings"></div>
+    <div class="hs" id="hs-idea"></div>
+  </div>
+</div>
+
+<div id="hsBanner">The island is watching&hellip;</div>
+<div id="proclaim"><span></span></div>
+<div id="hint">Tap objects. Drag to explore the whole Headquarters.</div>
+
+<div id="firstRun"><div id="frInner">
+  <img class="emblem" src="art/concepts/ansla-emblem.png" alt="The Colours of Ansla">
+  <h1>Escape from Ansla Island</h1>
+  <p id="frLead">Who steps ashore?</p>
+  <div id="frCrew"></div>
+  <div id="frMotif" style="display:none">
+    <p style="color:#e8d9b5; font-style:normal;">These are the Colours of Ansla.<br>They fly over Headquarters until new colours are earned.</p>
+    <button class="crewBtn" id="frHoist">Hoist the Colours</button>
+  </div>
+</div></div>
+
+<div class="veil" id="vBoard"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Adventure Board</h2>
+  <div class="sub">Our crew. Our rules. Our adventures.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vFlag"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Colours</h2>
+  <div class="sub">Raise them to call an adventure. Strike them when you return with a story.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vChest"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Treasure Chest</h2>
+  <div class="sub">Memories are our real treasure.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vStone"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Island Stone</h2>
+  <div class="sub">The stone interprets nature. It does not display data.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vCompass"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Navigate</h2>
+  <div class="sub">Find your way. Explore. Discover.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vChron"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Chronicle</h2>
+  <div class="sub">Record the tales. Keep the memories.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vChaos"><div class="panel dark">
+  <div class="closeX">&#10005;</div><h2>Chaos</h2>
+  <div class="sub">Unleash a bit of mischief.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vIdeas"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Plant an Idea</h2>
+  <div class="sub">Seeds for future adventures. Anyone may plant one.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vCall"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Call</h2>
+  <div class="sub">Listen for the drums&hellip;</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vCrew"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>The Crew</h2>
+  <div class="sub">Family is our crew. Adventure is our way.</div><div class="body"></div>
+</div></div>
+
+<div class="veil" id="vSettings"><div class="panel">
+  <div class="closeX">&#10005;</div><h2>Ship's Log &amp; Settings</h2>
+  <div class="sub">Quiet workings of the island.</div><div class="body"></div>
+</div></div>
+
+<input type="file" id="photoIn" accept="image/*" style="display:none">
+
+<script src="js/headquarters.js"></script>
+</body>
+</html>
