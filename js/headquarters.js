@@ -4,6 +4,7 @@
 /* ================= CONFIG (always first) ================= */
 var SUPA_URL = 'https://snnbgttfavruslntoosu.supabase.co';
 var SUPA_KEY = 'sb_publishable_DXRoK4gaSjx3fwQ78ltVMA_OB26BGqM';
+var VAPID_PUBLIC = 'BJ8hUUd0T1pGve9Xl_p3PCKGDrKBcP6u3MC0gWKbH2HsAdBzOiKRmZTp5L5t3S5xXIFd83obXveHHg8z4yyKNhQ';
 var LOCAL_KEY = 'ansla.v2.local';   /* this device only: settings, treasures (until the vault), who I am */
 var CACHE_KEY = 'ansla.v2.cache';   /* last-known shared state, for instant paint */
 var FUTURE_CREW = 'Milo, Cherub and BigJ will sign on when they reach the island.';
@@ -396,6 +397,7 @@ async function raiseColours(title, when){
     joining:[myName()], raised_at:new Date().toISOString(), updated_at:new Date().toISOString()
   }).eq('id', 1);
   if (r.error) toast('The wind dropped: ' + r.error.message);
+  else drumsBeat('colours', title);
 }
 function horizonHtml(){
   if (!shared.horizon.length) return '';
@@ -925,11 +927,58 @@ function openIdeas(){
   openV('vIdeas');
 }
 
-/* ================= THE CALL ================= */
-function openCall(){
-  body('vCall').innerHTML = shared.flag.raised
-    ? '<div class="notice">The colours are raised! One day the drums will sound on every crew member’s phone the moment this happens. For now, word travels the old way.</div>'
-    : '<div class="notice">The drums are quiet. They sound when the colours are raised, and one voyage soon, they will reach the whole crew wherever they roam.</div>';
+/* ================= THE CALL (the drums) ================= */
+function urlB64ToUint8Array(s){
+  var pad = '='.repeat((4 - s.length % 4) % 4);
+  var b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+  var raw = atob(b64), arr = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function drumsBeat(kind, what){
+  if (!online || !sb) return;
+  try { sb.functions.invoke('sound-the-drums', { body:{ kind:kind, by:myName(), what:what || '' } }).catch(function(){}); }
+  catch(e){}
+}
+async function subscribeDrums(){
+  try {
+    if (!online) return toast('The drums need the island connected.');
+    var reg = await navigator.serviceWorker.ready;
+    var perm = await Notification.requestPermission();
+    if (perm !== 'granted') return toast('The drums stay silent without your blessing.');
+    var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8Array(VAPID_PUBLIC) });
+    var j = sub.toJSON();
+    var r = await sb.from('push_subscriptions').upsert(
+      { member_id:me.id, endpoint:sub.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth }, { onConflict:'endpoint' });
+    if (r.error) return toast('The drums missed a beat: ' + r.error.message);
+    toast('The drums know you now, ' + myName() + '.');
+    openCall();
+  } catch(e){ toast('The drums stay silent on this shore.'); }
+}
+async function openCall(){
+  var b = body('vCall');
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  var canPush = ('serviceWorker' in navigator) && ('PushManager' in window) && window.isSecureContext;
+  var html = '';
+  if (!canPush){
+    html = '<div class="notice">The drums live on the deployed island (the https address). On this shore they can only be admired.</div>';
+  } else if (isIOS && !standalone){
+    html = '<div class="notice">On this phone, the drums only sound inside the installed island. Share &rarr; Add to Home Screen, open it from the icon, then return here.</div>';
+  } else {
+    var reg = await navigator.serviceWorker.ready;
+    var sub = await reg.pushManager.getSubscription();
+    if (sub && Notification.permission === 'granted'){
+      html = '<div class="notice">The drums know you, ' + esc(myName()) + '. When the colours rise or a lantern is lit anywhere in the world, this device will hear it.</div>' +
+        '<button class="wbtn ghost" id="drumRe">Teach them again</button>';
+    } else {
+      html = '<p style="font-size:15px; margin-bottom:10px;">The drums can learn to find you, wherever you roam. When the colours rise, they sound in your pocket.</p>' +
+        '<button class="wbtn" id="drumGo">Teach the drums to find you</button>';
+    }
+  }
+  b.innerHTML = html;
+  if ($('drumGo')) $('drumGo').onclick = subscribeDrums;
+  if ($('drumRe')) $('drumRe').onclick = subscribeDrums;
   openV('vCall');
 }
 
@@ -1039,6 +1088,7 @@ function renderHunt(){
       if (r.error) return toast('The lantern guttered: ' + r.error.message);
       shared.hideSeek = { active:true, soughtId:who.id, mode:mode, startedBy:myName() };
       reflectLantern(); geoSync(); renderHunt();
+      drumsBeat('hunt', who.name);
     };
   } else {
     var sought = members.filter(function(m){ return m.id === shared.hideSeek.soughtId; })[0];
@@ -1180,6 +1230,9 @@ async function init(){
   window.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAll(); });
   rolloIdleLoop();
   setTimeout(function(){ $('hint').classList.add('gone'); }, 6000);
+  if ('serviceWorker' in navigator && window.isSecureContext){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  }
   try { await connect(); }
   catch(e){ offlineMode(); }
 }

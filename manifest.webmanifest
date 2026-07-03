@@ -1,0 +1,14 @@
+{
+  "name": "Escape from Ansla Island",
+  "short_name": "Ansla Island",
+  "description": "Close me. Go outside. Come back with a story.",
+  "start_url": "./headquarters.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#120c06",
+  "theme_color": "#120c06",
+  "icons": [
+    { "src": "art/concepts/ansla-emblem.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
