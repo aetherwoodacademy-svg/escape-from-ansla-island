@@ -1,3 +1,6 @@
 # Family photos never travel to a public repo (Cloudinary/Supabase later)
 art/photos/
 .DS_Store
+
+# The schema file holds the crew code — never commit it
+supabase/voyage2_schema.sql
