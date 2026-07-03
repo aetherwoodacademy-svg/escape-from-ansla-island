@@ -1,13 +1,11 @@
 (function(){
 'use strict';
 
-/* ---------- CONFIG (always first) ---------- */
-var STORE_KEY = 'ansla.v1';
-var CREW = [
-  { id:'dadrew',  name:'Dadrew',  role:'The Captain' },
-  { id:'mumgela', name:'Mumgela', role:'The Mapmaker & Magic Keeper' },
-  { id:'theboy',  name:'The Boy', role:'First Mate & Explorer' }
-];
+/* ================= CONFIG (always first) ================= */
+var SUPA_URL = 'https://snnbgttfavruslntoosu.supabase.co';
+var SUPA_KEY = 'sb_publishable_DXRoK4gaSjx3fwQ78ltVMA_OB26BGqM';
+var LOCAL_KEY = 'ansla.v2.local';   /* this device only: settings, treasures (until the vault), who I am */
+var CACHE_KEY = 'ansla.v2.cache';   /* last-known shared state, for instant paint */
 var FUTURE_CREW = 'Milo, Cherub and BigJ will sign on when they reach the island.';
 var LIBRARY = {
   'On the water': ['The tinny','SUP','Kayaking','Boogie boarding','River swimming','Fishing','Magnet fishing'],
@@ -19,6 +17,12 @@ var LIBRARY = {
   'Big days out': ['Dreamworld','SEA LIFE'],
   'Home ports': ['Movie night','Board games','Quiz night']
 };
+var CAT_ART = {
+  'On the water':'on_the_water', 'Trails and wilds':'trails_and_wilds', 'Wildlife':'wildlife',
+  'Sky and night':'sky_and_night', 'Fire and camp':'fire_and_camp', 'Treasure hunting':'treasure_hunting',
+  'Big days out':'big_days_out', 'Home ports':'home_ports'
+};
+var CAT_POS = { 'Home ports':'center 72%' };
 var STONE_LINES = {
   dawn: ['The island wakes gold and quiet. First light belongs to the brave.',
          'The tide has turned in the night. New sand, new stories.',
@@ -39,127 +43,51 @@ var STONE_SUGGEST = {
   dusk: ['Beach walk','Fishing','Campfire','Storm watching'],
   night:['Stargazing','Astrophotography','Moonlit walk','Movie night','Board games','Quiz night']
 };
-var CHAOS_LINES = [
+var CHAOS_TEASES = [
   'The crystal hums. It knows something you do not.',
   'Not yet. But soon, and without warning.',
   'A little chaos is being prepared. The island asks for patience.',
   'The crystal flickers, considers you carefully, and dims again.'
 ];
-var CHAOS_MISSIONS = [
-  'A stick on this adventure has been abducted by aliens. Find it and document its safe return.',
-  'Convince the crew something strange lives in these woods. A yowie, perhaps. Commit to it.',
-  'Prepare one innocent-looking snack with a surprising (edible!) twist and get a crew member to eat it.',
-  'Claim a completely ordinary rock is priceless treasure. Defend it beyond all reason.',
-  'Invent a solemn island tradition on the spot and get the whole crew to perform it.',
-  'Swap one item of someone’s gear for something ridiculous without being caught.',
-  'Narrate the crew like a nature documentary until somebody cracks.',
-  'Photograph a crew member mid-blink and declare it their official portrait.',
-  'Insist on a dramatic slow-motion walk for no reason. Recruit at least one other.',
-  'Hide a hand-drawn treasure map for the crew to find. It must lead to something silly.',
-  'Speak only in pirate for ten full minutes. Refuse to explain why.',
-  'Award an invisible medal to a crew member with a full ceremony and a speech.'
-];
 var GREETINGS = { dawn:'Good morning, Captain.', day:'Good day, Captain.', dusk:'Good evening, Captain.', night:'The stars keep watch, Captain.' };
 var WHEN_CHOICES = ['At first light','Midmorning','High sun','Golden hour','Under the stars','When the drums sound'];
-var CAT_ART = {
-  'On the water':'on_the_water', 'Trails and wilds':'trails_and_wilds', 'Wildlife':'wildlife',
-  'Sky and night':'sky_and_night', 'Fire and camp':'fire_and_camp', 'Treasure hunting':'treasure_hunting',
-  'Big days out':'big_days_out', 'Home ports':'home_ports'
-};
-var CAT_POS = { 'Home ports':'center 72%' };
+var DIRS = [['North','the wild horizon'],['North-east','the morning water'],['East','the rising sun'],['South-east','the river mouth'],
+            ['South','the old mountain'],['South-west','the deep forest'],['West','the setting sun'],['North-west','the far headland']];
 var IDLE_MIN = 20000, IDLE_MAX = 45000;
 var PHOTO_MAX_EDGE = 700, PHOTO_QUALITY = 0.7;
 
-/* ---------- STATE ---------- */
-function freshState(){
-  return { crew:{ currentMemberId:null }, motif:{ chosen:null, unlocked:['ansla-emblem'] },
-    flag:{ raised:false, adventure:null, raisedBy:null, raisedAt:null, joining:[] },
-    adventures:[], ideas:[], horizon:[], treasures:[], rewards:{ shanty:[], motifs:[], chaosChampions:[] }, chronicle:[],
-    chaos:{ deployed:false, deployedBy:null, missions:{} },
-    hideSeek:{ active:false }, stone:{}, compass:{}, settings:{ timeOverride:'auto' } };
+/* ================= STATE ================= */
+var sb = null;
+var online = false;
+var members = [];
+var me = { id:null, name:null, role:null };
+var shared = {
+  flag:{ raised:false, adventure:null, when:null, raisedBy:null, joining:[] },
+  horizon:[], ideas:[], adventures:[], chronicle:[], shanty:[],
+  chaos:{ deployed:false, deployedBy:null },
+  hideSeek:{ active:false }
+};
+var local = { settings:{ timeOverride:'auto' }, treasures:[], memberName:null };
+
+function loadLocal(){
+  try { var raw = localStorage.getItem(LOCAL_KEY); if (raw){ var l = JSON.parse(raw);
+    local.settings = l.settings || local.settings; local.treasures = l.treasures || []; local.memberName = l.memberName || null; } }
+  catch(e){}
 }
-var state;
-function load(){
-  try { var raw = localStorage.getItem(STORE_KEY); state = raw ? JSON.parse(raw) : freshState(); }
-  catch(e){ state = freshState(); }
-  /* migrate older saves */
-  if (!state.ideas) state.ideas = [];
-  if (!state.horizon) state.horizon = [];
-  if (!state.chaos) state.chaos = { deployed:false, deployedBy:null, missions:{} };
-  if (!state.rewards.chaosChampions) state.rewards.chaosChampions = [];
+function saveLocal(){
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(local)); } catch(e){}
 }
-function allAboard(){
-  return state.flag.raised && CREW.every(function(c){ return state.flag.joining.indexOf(c.name) !== -1; });
+function cacheSave(){ try { localStorage.setItem(CACHE_KEY, JSON.stringify(shared)); } catch(e){} }
+function cachePaint(){
+  try { var raw = localStorage.getItem(CACHE_KEY); if (raw){ shared = Object.assign(shared, JSON.parse(raw)); } } catch(e){}
 }
-function save(){
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); try { reflectScene(); } catch(e2){} return true; }
-  catch(e){ alert('The chest is full. The island cannot hold more just now (device storage limit). Older treasures may need to sail to the cloud in a later voyage.'); return false; }
-}
-function proclaim(text){
-  var p = $('proclaim'); if (!p) return;
-  p.querySelector('span').textContent = text;
-  p.classList.remove('show'); void p.offsetWidth; p.classList.add('show');
-  setTimeout(function(){ p.classList.remove('show'); }, 2300);
-}
-function catOf(title){
-  var found = null;
-  Object.keys(LIBRARY).forEach(function(cat){ if (LIBRARY[cat].indexOf(title) !== -1) found = cat; });
-  return found;
-}
-function catBanner(title){
-  var cat = catOf(title);
-  if (!cat || !CAT_ART[cat]) return '';
-  return '<div class="catCard" style="background-image:url(\'art/board/' + CAT_ART[cat] + '.jpg\')' +
-         (CAT_POS[cat] ? '; background-position:' + CAT_POS[cat] : '') + '"><span>' + esc(title) + '</span></div>';
-}
-function reflectScene(){
-  var pn = $('pennant'); if (pn) pn.classList.toggle('up', !!state.flag.raised);
-  var bl = $('boardLive');
-  if (bl){
-    var artCat = state.flag.raised ? catOf(state.flag.adventure) : (state.horizon.length ? catOf(state.horizon[0].title) : null);
-    if (artCat && CAT_ART[artCat]){
-      bl.classList.add('hasArt');
-      bl.style.backgroundImage = 'linear-gradient(rgba(12,7,3,.15), rgba(12,7,3,.68)), url(\'art/board/' + CAT_ART[artCat] + '.jpg\')';
-    } else {
-      bl.classList.remove('hasArt');
-      bl.style.backgroundImage = '';
-    }
-  }
-  var t = $('blTitle'), bb = $('blBody');
-  if (t && bb){
-    if (state.flag.raised){
-      t.textContent = state.flag.raisedBy + ' has RAISED THE COLOURS!';
-      bb.innerHTML = esc(state.flag.adventure) + (state.flag.when ? '<br>' + esc(state.flag.when) : '') +
-        '<br><small>' + state.flag.joining.length + ' joining: ' + esc(state.flag.joining.join(', ')) +
-        (state.chaos.deployed ? ' &middot; chaos is loose' : '') + '</small>' +
-        (state.horizon.length ? '<br><small>On the horizon: ' + esc(state.horizon[0].title) + (state.horizon.length > 1 ? ' +' + (state.horizon.length - 1) + ' more' : '') + '</small>' : '');
-    } else if (state.horizon.length){
-      t.textContent = 'The board is quiet.';
-      bb.innerHTML = 'No colours flying over Ansla.<br><small>On the horizon: ' +
-        esc(state.horizon[0].title) + (state.horizon[0].when ? ', ' + esc(state.horizon[0].when.toLowerCase()) : '') +
-        (state.horizon.length > 1 ? ' +' + (state.horizon.length - 1) + ' more' : '') + '</small>';
-    } else {
-      t.textContent = 'The board is quiet.';
-      bb.innerHTML = 'No colours flying over Ansla.<br><small>Tap the board to choose an adventure, or plant an idea below.</small>';
-    }
-  }
-  var cl = $('chestLive');
-  if (cl){
-    cl.innerHTML = '';
-    state.treasures.slice(-3).reverse().forEach(function(tr){
-      var d = document.createElement('div'); d.className = 'mini';
-      var im = document.createElement('img'); im.alt = ''; im.src = tr.imageRef;
-      d.appendChild(im); cl.appendChild(d);
-    });
-  }
-}
-function member(){ var m = CREW.filter(function(c){ return c.id === state.crew.currentMemberId; })[0]; return m || CREW[0]; }
 function $(id){ return document.getElementById(id); }
 function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function myName(){ return me.name || local.memberName || 'Captain'; }
 
-/* ---------- TIME OF DAY ---------- */
+/* ================= TIME OF DAY ================= */
 function timeState(){
-  if (state.settings.timeOverride && state.settings.timeOverride !== 'auto') return state.settings.timeOverride;
+  if (local.settings.timeOverride && local.settings.timeOverride !== 'auto') return local.settings.timeOverride;
   var h = new Date().getHours() + new Date().getMinutes()/60;
   if (h >= 5 && h < 8) return 'dawn';
   if (h >= 8 && h < 16.5) return 'day';
@@ -168,13 +96,12 @@ function timeState(){
 }
 function applyTime(){
   var t = timeState();
-  var sc = $('scene');
-  sc.className = 't-' + t;
+  $('scene').className = 't-' + t;
   $('greetTime').textContent = GREETINGS[t];
-  $('greetName').textContent = 'Ahoy, ' + member().name + '!';
+  $('greetName').textContent = 'Ahoy, ' + myName() + '!';
 }
 
-/* ---------- SCENE FIT & DRAG (auto-fits and recentres on any rotate/resize) ---------- */
+/* ================= SCENE FIT & DRAG ================= */
 var offX = 0, offY = 0, minX = 0, minY = 0, dragging = false, moved = 0;
 var startX = 0, startY = 0, startOffX = 0, startOffY = 0, IMG_RATIO = 1.5;
 function applyOffset(){ $('scene').style.transform = 'translate(' + offX + 'px,' + offY + 'px)'; }
@@ -211,64 +138,279 @@ function bindDrag(){
 }
 function wasDrag(){ return moved > 8; }
 
-/* ---------- RIPPLE ---------- */
+/* ================= RIPPLE / TOAST ================= */
 function ripple(e){
   var r = document.createElement('div'); r.className = 'ripple';
   var rect = $('scene').getBoundingClientRect();
   r.style.left = (e.clientX - rect.left) + 'px'; r.style.top = (e.clientY - rect.top) + 'px';
   $('scene').appendChild(r); setTimeout(function(){ r.remove(); }, 750);
 }
+var toastTimer = null;
+function toast(msg){
+  var h = $('hint'); h.textContent = msg; h.classList.remove('gone');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ h.classList.add('gone'); }, 5000);
+}
 
-/* ---------- PANEL PLUMBING ---------- */
+/* ================= PANEL PLUMBING ================= */
 function openV(id){ $(id).classList.add('open'); }
 function closeV(id){ $(id).classList.remove('open'); }
 function closeAll(){ document.querySelectorAll('.veil.open').forEach(function(v){ v.classList.remove('open'); }); }
 function body(id){ return document.querySelector('#' + id + ' .body'); }
-
-/* ---------- ADVENTURE BOARD ---------- */
-function raiseColours(title, when){
-  state.flag = { raised:true, adventure:title, when:when || '', raisedBy:member().name,
-                 raisedAt:new Date().toISOString(), joining:[member().name] };
-  state.chaos = { deployed:false, deployedBy:null, missions:{} };
-  save(); closeAll();
-  proclaim('The Colours Are Raised');
+function proclaim(text){
+  var p = $('proclaim'); if (!p) return;
+  p.querySelector('span').textContent = text;
+  p.classList.remove('show'); void p.offsetWidth; p.classList.add('show');
+  setTimeout(function(){ p.classList.remove('show'); }, 2300);
+}
+function boardPop(){
   var bl = $('boardLive'); if (bl){ bl.classList.remove('pop'); void bl.offsetWidth; bl.classList.add('pop'); }
 }
+
+/* ================= SCENE REFLECTION ================= */
+function catOf(title){
+  var found = null;
+  Object.keys(LIBRARY).forEach(function(cat){ if (LIBRARY[cat].indexOf(title) !== -1) found = cat; });
+  return found;
+}
+function catBanner(title){
+  var cat = catOf(title);
+  if (!cat || !CAT_ART[cat]) return '';
+  return '<div class="catCard" style="background-image:url(\'art/board/' + CAT_ART[cat] + '.jpg\')' +
+         (CAT_POS[cat] ? '; background-position:' + CAT_POS[cat] : '') + '"><span>' + esc(title) + '</span></div>';
+}
+function reflectScene(){
+  var pn = $('pennant'); if (pn) pn.classList.toggle('up', !!shared.flag.raised);
+  var bl = $('boardLive');
+  if (bl){
+    var artCat = shared.flag.raised ? catOf(shared.flag.adventure) : (shared.horizon.length ? catOf(shared.horizon[0].title) : null);
+    if (artCat && CAT_ART[artCat]){
+      bl.classList.add('hasArt');
+      bl.style.backgroundImage = 'linear-gradient(rgba(12,7,3,.15), rgba(12,7,3,.68)), url(\'art/board/' + CAT_ART[artCat] + '.jpg\')';
+    } else {
+      bl.classList.remove('hasArt');
+      bl.style.backgroundImage = '';
+    }
+  }
+  var t = $('blTitle'), bb = $('blBody');
+  if (t && bb){
+    if (shared.flag.raised){
+      t.textContent = shared.flag.raisedBy + ' has RAISED THE COLOURS!';
+      bb.innerHTML = esc(shared.flag.adventure) + (shared.flag.when ? '<br>' + esc(shared.flag.when) : '') +
+        '<br><small>' + shared.flag.joining.length + ' joining: ' + esc(shared.flag.joining.join(', ')) +
+        (shared.chaos.deployed ? ' &middot; chaos is loose' : '') + '</small>' +
+        (shared.horizon.length ? '<br><small>On the horizon: ' + esc(shared.horizon[0].title) + (shared.horizon.length > 1 ? ' +' + (shared.horizon.length - 1) + ' more' : '') + '</small>' : '');
+    } else if (shared.horizon.length){
+      t.textContent = 'The board is quiet.';
+      bb.innerHTML = 'No colours flying over Ansla.<br><small>On the horizon: ' +
+        esc(shared.horizon[0].title) + (shared.horizon[0].when ? ', ' + esc(shared.horizon[0].when.toLowerCase()) : '') +
+        (shared.horizon.length > 1 ? ' +' + (shared.horizon.length - 1) + ' more' : '') + '</small>';
+    } else {
+      t.textContent = 'The board is quiet.';
+      bb.innerHTML = 'No colours flying over Ansla.<br><small>Tap the board to choose an adventure, or plant an idea below.</small>';
+    }
+  }
+  var cl = $('chestLive');
+  if (cl){
+    cl.innerHTML = '';
+    local.treasures.slice(-3).reverse().forEach(function(tr){
+      var d = document.createElement('div'); d.className = 'mini';
+      var im = document.createElement('img'); im.alt = ''; im.src = tr.imageRef;
+      d.appendChild(im); cl.appendChild(d);
+    });
+  }
+}
+function reflectLantern(){
+  $('lanternGlow').classList.toggle('on', !!shared.hideSeek.active);
+  $('hsBanner').classList.toggle('show', !!shared.hideSeek.active);
+}
+
+/* ================= SUPABASE: CONNECT, FETCH, SUBSCRIBE ================= */
+function mapFlag(row){
+  return { raised:!!row.raised, adventure:row.adventure, when:row.when_label,
+           raisedBy:row.raised_by, joining:row.joining || [], raisedAt:row.raised_at };
+}
+async function ensureAuth(){
+  var s = await sb.auth.getSession();
+  if (!s.data.session){
+    var r = await sb.auth.signInAnonymously();
+    if (r.error) throw r.error;
+  }
+}
+async function fetchRoster(){
+  var r = await sb.from('crew_members').select('*').eq('active', true).order('joined_at');
+  if (r.error) throw r.error;
+  members = r.data || [];
+}
+async function whoAmI(){
+  var r = await sb.from('crew_devices').select('member_id').maybeSingle();
+  if (r.data){
+    var m = members.filter(function(x){ return x.id === r.data.member_id; })[0];
+    if (m){ me = { id:m.id, name:m.name, role:m.role }; local.memberName = m.name; saveLocal(); return true; }
+  }
+  return false;
+}
+async function fetchFlag(){ var r = await sb.from('flag').select('*').eq('id',1).single(); if (r.data) shared.flag = mapFlag(r.data); }
+async function fetchHorizon(){ var r = await sb.from('horizon').select('*').order('charted_at'); if (r.data) shared.horizon = r.data.map(function(h){ return { id:h.id, title:h.title, when:h.when_label, chartedBy:h.charted_by }; }); }
+async function fetchIdeas(){ var r = await sb.from('ideas').select('*').order('planted_at'); if (r.data) shared.ideas = r.data.map(function(i){ return { id:i.id, text:i.idea, plantedBy:i.planted_by, plantedAt:i.planted_at }; }); }
+async function fetchAdventures(){ var r = await sb.from('adventures').select('*').order('completed_at'); if (r.data) shared.adventures = r.data.map(function(a){ return { title:a.title, when:a.when_label, joining:a.joining||[], chaos:a.chaos, chaosChampion:a.chaos_champion, completedAt:a.completed_at }; }); }
+async function fetchChronicle(){ var r = await sb.from('chronicle').select('*').order('created_at'); if (r.data) shared.chronicle = r.data.map(function(c){ return { entry:c.entry, author:c.author, date:c.created_at }; }); }
+async function fetchShanty(){ var r = await sb.from('shanty_lines').select('*').order('earned_at'); if (r.data) shared.shanty = r.data.map(function(s){ return { line:s.line, author:s.author, date:s.earned_at }; }); }
+async function fetchChaos(){ var r = await sb.from('chaos_state').select('*').eq('id',1).single(); if (r.data) shared.chaos = { deployed:!!r.data.deployed, deployedBy:r.data.deployed_by }; }
+async function fetchHideSeek(){ var r = await sb.from('hide_seek').select('*').eq('id',1).single(); if (r.data) shared.hideSeek = { active:!!r.data.active, startedAt:r.data.started_at }; }
+async function refreshShared(){
+  await Promise.all([fetchFlag(), fetchHorizon(), fetchIdeas(), fetchAdventures(), fetchChronicle(), fetchShanty(), fetchChaos(), fetchHideSeek()]);
+  cacheSave(); reflectScene(); reflectLantern();
+}
+function subscribe(){
+  sb.channel('island')
+    .on('postgres_changes', { event:'*', schema:'public', table:'flag' }, function(p){
+      var was = shared.flag.raised;
+      shared.flag = mapFlag(p.new); cacheSave(); reflectScene();
+      if (shared.flag.raised && !was){ proclaim('The Colours Are Raised'); boardPop(); }
+      if (!shared.flag.raised && was){ proclaim('The Colours Are Struck'); }
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'chaos_state' }, function(p){
+      var was = shared.chaos.deployed;
+      shared.chaos = { deployed:!!p.new.deployed, deployedBy:p.new.deployed_by };
+      cacheSave(); reflectScene();
+      if (shared.chaos.deployed && !was && shared.chaos.deployedBy !== myName()) proclaim('Chaos Is Loose');
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'hide_seek' }, function(p){
+      shared.hideSeek = { active:!!p.new.active, startedAt:p.new.started_at };
+      cacheSave(); reflectLantern();
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'horizon' }, function(){ fetchHorizon().then(function(){ cacheSave(); reflectScene(); }); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'ideas' }, function(){ fetchIdeas().then(cacheSave); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'adventures' }, function(){ fetchAdventures().then(cacheSave); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'chronicle' }, function(){ fetchChronicle().then(cacheSave); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'shanty_lines' }, function(){ fetchShanty().then(cacheSave); })
+    .subscribe();
+}
+async function connect(){
+  if (!window.supabase){ throw new Error('Supabase library did not load'); }
+  sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+  await ensureAuth();
+  await fetchRoster();
+  var known = await whoAmI();
+  online = true;
+  if (!known){ firstRun(); return; }
+  applyTime();
+  await refreshShared();
+  subscribe();
+}
+function offlineMode(){
+  online = false;
+  applyTime();
+  reflectScene(); reflectLantern();
+  toast('The island is beyond the reef. Reconnect to sail with the crew.');
+}
+
+/* ================= FIRST RUN (crew code + claim) ================= */
+function firstRun(){
+  var fr = $('firstRun'); fr.classList.add('open');
+  $('frLead').style.display = ''; $('frCode').style.display = ''; $('frCrew').style.display = 'none'; $('frMotif').style.display = 'none';
+  $('codeGo').onclick = function(){
+    var code = $('codeIn').value.trim();
+    if (!code) return;
+    $('codeErr').textContent = '';
+    $('frLead').textContent = 'Who steps ashore?';
+    $('frCode').style.display = 'none';
+    var wrap = $('frCrew'); wrap.style.display = ''; wrap.innerHTML = '';
+    members.forEach(function(m){
+      var btn = document.createElement('button');
+      btn.className = 'crewBtn';
+      btn.innerHTML = esc(m.name) + '<small>' + esc(m.role) + '</small>';
+      btn.onclick = async function(){
+        var r = await sb.rpc('join_crew', { code:code, member:m.id });
+        if (r.error || r.data !== true){
+          $('frLead').textContent = 'Speak the crew code.';
+          $('frLead').style.display = '';
+          $('frCode').style.display = ''; wrap.style.display = 'none';
+          $('codeErr').textContent = 'The island does not answer to that knock. Try again.';
+          return;
+        }
+        me = { id:m.id, name:m.name, role:m.role };
+        local.memberName = m.name; saveLocal();
+        wrap.style.display = 'none'; $('frLead').style.display = 'none';
+        $('frMotif').style.display = 'block';
+      };
+      wrap.appendChild(btn);
+    });
+  };
+  $('frHoist').onclick = async function(){
+    fr.classList.remove('open');
+    applyTime();
+    await refreshShared();
+    subscribe();
+  };
+}
+
+/* ================= ADVENTURE BOARD ================= */
+async function raiseColours(title, when){
+  if (shared.flag.raised) return;
+  shared.flag = { raised:true, adventure:title, when:when || '', raisedBy:myName(), joining:[myName()] };
+  reflectScene(); closeAll(); proclaim('The Colours Are Raised'); boardPop();
+  if (!online) return toast('Raised here only. The crew will see it when the island reconnects.');
+  await sb.rpc('reset_chaos');
+  var r = await sb.from('flag').update({
+    raised:true, adventure:title, when_label:when || '', raised_by:myName(),
+    joining:[myName()], raised_at:new Date().toISOString(), updated_at:new Date().toISOString()
+  }).eq('id', 1);
+  if (r.error) toast('The wind dropped: ' + r.error.message);
+}
 function horizonHtml(){
-  if (!state.horizon.length) return '';
+  if (!shared.horizon.length) return '';
   var h = '<div class="cat">On the horizon</div>';
-  state.horizon.forEach(function(hz, i){
+  shared.horizon.forEach(function(hz, i){
     h += '<div class="advCard"><b style="font-size:15px;">' + esc(hz.title) + '</b>' +
       (hz.when ? ' <span style="font-size:13px; color:#7a5a32;">&middot; ' + esc(hz.when) + '</span>' : '') +
       '<br><span style="font-size:12px; color:#8a765a; font-style:italic;">charted by ' + esc(hz.chartedBy) + '</span><br>' +
-      (state.flag.raised ? '' : '<button class="wbtn hzHoist" data-i="' + i + '" style="margin-top:8px; font-size:13px;">Hoist the Colours</button>') +
+      (shared.flag.raised ? '' : '<button class="wbtn hzHoist" data-i="' + i + '" style="margin-top:8px; font-size:13px;">Hoist the Colours</button>') +
       '<button class="wbtn ghost hzDrop" data-i="' + i + '" style="margin-top:8px; font-size:13px;">Let it drift</button></div>';
   });
   return h;
 }
 function wireHorizon(scope){
   scope.querySelectorAll('.hzHoist').forEach(function(el){
-    el.onclick = function(){
-      var h = state.horizon.splice(parseInt(el.getAttribute('data-i'), 10), 1)[0];
-      if (h) raiseColours(h.title, h.when);
+    el.onclick = async function(){
+      var h = shared.horizon[parseInt(el.getAttribute('data-i'), 10)];
+      if (!h) return;
+      if (online && h.id) await sb.from('horizon').delete().eq('id', h.id);
+      shared.horizon = shared.horizon.filter(function(x){ return x !== h; });
+      raiseColours(h.title, h.when);
     };
   });
   scope.querySelectorAll('.hzDrop').forEach(function(el){
-    el.onclick = function(){ state.horizon.splice(parseInt(el.getAttribute('data-i'), 10), 1); save(); openBoard(); };
+    el.onclick = async function(){
+      var h = shared.horizon[parseInt(el.getAttribute('data-i'), 10)];
+      if (!h) return;
+      shared.horizon = shared.horizon.filter(function(x){ return x !== h; });
+      if (online && h.id) await sb.from('horizon').delete().eq('id', h.id);
+      reflectScene(); openBoard();
+    };
   });
+}
+async function chartHorizon(title, when){
+  shared.horizon.push({ title:title, when:when || '', chartedBy:myName() });
+  reflectScene();
+  if (online){
+    var r = await sb.from('horizon').insert({ title:title, when_label:when || '', charted_by:myName() });
+    if (r.error) toast('The chart smudged: ' + r.error.message); else fetchHorizon();
+  }
 }
 function openBoard(){
   var b = body('vBoard'); b.innerHTML = '';
   var html = '';
-  if (state.flag.raised){
-    var joined = state.flag.joining.indexOf(member().name) !== -1;
-    html += catBanner(state.flag.adventure) +
-      '<div class="advCard"><b>' + esc(state.flag.raisedBy) + ' has RAISED THE COLOURS!</b><br>' +
-      esc(state.flag.adventure) + (state.flag.when ? '<br>' + esc(state.flag.when) : '') +
-      '<br><span style="font-size:13px;color:#7a5a32;">' + state.flag.joining.length + ' joining: ' + esc(state.flag.joining.join(', ')) + '</span></div>' +
+  if (shared.flag.raised){
+    var joined = shared.flag.joining.indexOf(myName()) !== -1;
+    html += catBanner(shared.flag.adventure) +
+      '<div class="advCard"><b>' + esc(shared.flag.raisedBy) + ' has RAISED THE COLOURS!</b><br>' +
+      esc(shared.flag.adventure) + (shared.flag.when ? '<br>' + esc(shared.flag.when) : '') +
+      '<br><span style="font-size:13px;color:#7a5a32;">' + shared.flag.joining.length + ' joining: ' + esc(shared.flag.joining.join(', ')) + '</span></div>' +
       '<button class="wbtn" id="bJoin"' + (joined ? ' disabled' : '') + '>' + (joined ? 'You are aboard' : "I'm going, is anyone coming? Count me in!") + '</button>' +
       '<div class="notice">When the crew returns, strike the colours at the flagpole and log the story. Fancy something after? Chart it on the horizon below.</div>';
-  } else if (!state.horizon.length){
+  } else if (!shared.horizon.length){
     html += '<div class="notice">No colours flying. Choose an adventure and raise them, or chart one for the horizon.</div>';
   }
   html += horizonHtml();
@@ -281,12 +423,16 @@ function openBoard(){
     '<div class="advCard"><b id="rfName"></b></div>' +
     '<p style="font-size:13.5px; color:#7a5a32; margin:4px 0;">When do we sail?</p>' +
     '<div id="rfWhenRow"></div>' +
-    (state.flag.raised ? '' : '<button class="wbtn" id="rfGo" style="margin-top:10px;">Raise the Colours</button>') +
+    (shared.flag.raised ? '' : '<button class="wbtn" id="rfGo" style="margin-top:10px;">Raise the Colours</button>') +
     '<button class="wbtn ghost" id="rfChart" style="margin-top:10px;">Chart it on the horizon</button>' +
     '<button class="wbtn ghost" id="rfNo">Not this one</button></div>';
   b.innerHTML = html;
-  if ($('bJoin')) $('bJoin').onclick = function(){
-    if (state.flag.joining.indexOf(member().name) === -1){ state.flag.joining.push(member().name); save(); }
+  if ($('bJoin')) $('bJoin').onclick = async function(){
+    if (shared.flag.joining.indexOf(myName()) === -1){
+      shared.flag.joining.push(myName());
+      reflectScene();
+      if (online) await sb.from('flag').update({ joining:shared.flag.joining, updated_at:new Date().toISOString() }).eq('id', 1);
+    }
     openBoard();
   };
   wireHorizon(b);
@@ -313,31 +459,31 @@ function openBoard(){
   if ($('rfGo')) $('rfGo').onclick = function(){ if (chosen) raiseColours(chosen, whenPick); };
   $('rfChart').onclick = function(){
     if (!chosen) return;
-    state.horizon.push({ title:chosen, when:whenPick, chartedBy:member().name, chartedAt:new Date().toISOString() });
-    save(); openBoard();
+    chartHorizon(chosen, whenPick);
+    openBoard();
   };
   $('rfNo').onclick = function(){ chosen = null; $('raiseForm').style.display = 'none'; };
   openV('vBoard');
 }
 
-/* ---------- FLAG ---------- */
+/* ================= FLAG ================= */
 function openFlag(){
   var b = body('vFlag'); b.innerHTML = '';
-  if (!state.flag.raised){
+  if (!shared.flag.raised){
     b.innerHTML = '<div class="notice">The colours are stowed. The Adventure Board is where they rise.</div>' +
       '<button class="wbtn" id="fToBoard">To the Board</button>';
     $('fToBoard').onclick = function(){ closeV('vFlag'); openBoard(); };
   } else {
-    b.innerHTML = catBanner(state.flag.adventure) +
-      '<div class="advCard"><b>' + esc(state.flag.adventure) + '</b>' + (state.flag.when ? '<br>' + esc(state.flag.when) : '') +
-      '<br><span style="font-size:13px;color:#7a5a32;">Raised by ' + esc(state.flag.raisedBy) + ' &middot; crew aboard: ' + esc(state.flag.joining.join(', ')) + '</span></div>' +
+    b.innerHTML = catBanner(shared.flag.adventure) +
+      '<div class="advCard"><b>' + esc(shared.flag.adventure) + '</b>' + (shared.flag.when ? '<br>' + esc(shared.flag.when) : '') +
+      '<br><span style="font-size:13px;color:#7a5a32;">Raised by ' + esc(shared.flag.raisedBy) + ' &middot; crew aboard: ' + esc(shared.flag.joining.join(', ')) + '</span></div>' +
       '<button class="wbtn" id="fStrike">Strike the Colours (we are home)</button>' +
       '<div id="logForm" style="display:none; margin-top:14px;">' +
         '<div class="cat">Log the adventure</div>' +
         '<p style="font-size:14px; margin:8px 0;">Who won the day? The winner writes the next line of the shanty.</p>' +
         '<div id="winnerRow"></div>' +
         '<input type="text" id="shantyLine" class="scrollInput" placeholder="The next line of our shanty (winner’s words)&hellip;">' +
-        (state.chaos.deployed ?
+        (shared.chaos.deployed ?
           '<p style="font-size:14px; margin:8px 0;">Chaos was loose out there. The crew votes: who was <b>Chaos Champion</b>?</p><div id="champRow"></div>'
           : '') +
         '<textarea id="chronNote" class="journal" placeholder="A few words for the Chronicle: what happened out there?"></textarea>' +
@@ -348,7 +494,7 @@ function openFlag(){
       $('logForm').style.display = 'block';
       var winner = null, champ = null;
       function pickRow(rowEl, mark, setter){
-        CREW.forEach(function(c){
+        members.forEach(function(c){
           var btn = document.createElement('button');
           btn.className = 'pickChip'; btn.textContent = c.name;
           btn.onclick = function(){
@@ -361,38 +507,46 @@ function openFlag(){
       }
       pickRow($('winnerRow'), '⚔', function(n){ winner = n; });
       if ($('champRow')) pickRow($('champRow'), '★', function(n){ champ = n; });
-      $('fLog').onclick = function(){
+      $('fLog').onclick = async function(){
         var line = $('shantyLine').value.trim();
         var note = $('chronNote').value.trim();
-        var hadChaos = state.chaos.deployed;
-        state.adventures.push({ title:state.flag.adventure, when:state.flag.when, joining:state.flag.joining,
-          raisedBy:state.flag.raisedBy, status:'completed', completedAt:new Date().toISOString(),
-          chaos:hadChaos, chaosChampion:champ || null });
-        if (line) state.rewards.shanty.push({ line:line, author:winner || member().name, date:new Date().toISOString() });
-        if (hadChaos && champ) state.rewards.chaosChampions.push({ name:champ, adventure:state.flag.adventure, date:new Date().toISOString() });
-        if (note) state.chronicle.push({ entry:note, author:member().name, date:new Date().toISOString() });
-        state.flag = { raised:false, adventure:null, when:null, raisedBy:null, raisedAt:null, joining:[] };
-        state.chaos = { deployed:false, deployedBy:null, missions:{} };
-        save();
-        proclaim('The Colours Are Struck');
-        var nxt = state.horizon[0];
+        var hadChaos = shared.chaos.deployed;
+        var adv = { title:shared.flag.adventure, when:shared.flag.when, joining:shared.flag.joining,
+                    raisedBy:shared.flag.raisedBy, chaos:hadChaos, chaosChampion:champ || null };
+        shared.flag = { raised:false, adventure:null, when:null, raisedBy:null, joining:[] };
+        shared.chaos = { deployed:false, deployedBy:null };
+        reflectScene(); proclaim('The Colours Are Struck');
+        var nxt = shared.horizon[0];
         b.innerHTML = '<div class="notice">The colours are struck, the story is kept. ' +
           (line ? 'The shanty grows a line longer. ' : 'The shanty waits for a braver day. ') +
           (hadChaos && champ ? esc(champ) + ' is crowned Chaos Champion.' : '') + '</div>' +
           (nxt ? '<div class="advCard"><b>' + esc(nxt.title) + '</b>' + (nxt.when ? ' <span style="font-size:13px; color:#7a5a32;">&middot; ' + esc(nxt.when) + '</span>' : '') +
                  '<br><span style="font-size:13px; font-style:italic; color:#8a765a;">waits on the horizon.</span></div>' +
                  '<button class="wbtn" id="fNext">Hoist the Colours for it</button>' : '');
-        if (nxt) $('fNext').onclick = function(){
-          var h = state.horizon.shift();
-          if (h) raiseColours(h.title, h.when);
+        if (nxt) $('fNext').onclick = async function(){
+          if (online && nxt.id) await sb.from('horizon').delete().eq('id', nxt.id);
+          shared.horizon = shared.horizon.filter(function(x){ return x !== nxt; });
+          raiseColours(nxt.title, nxt.when);
         };
+        if (!online) return toast('Logged here only. It sails to the crew when the island reconnects.');
+        var jobs = [
+          sb.from('adventures').insert({ title:adv.title, when_label:adv.when || '', raised_by:adv.raisedBy,
+            joining:adv.joining, chaos:adv.chaos, chaos_champion:adv.chaosChampion }),
+          sb.from('flag').update({ raised:false, adventure:null, when_label:null, raised_by:null, joining:[], raised_at:null, updated_at:new Date().toISOString() }).eq('id', 1),
+          sb.rpc('reset_chaos')
+        ];
+        if (line) jobs.push(sb.from('shanty_lines').insert({ line:line, author:winner || myName() }));
+        if (note) jobs.push(sb.from('chronicle').insert({ entry:note, author:myName() }));
+        var results = await Promise.all(jobs);
+        var bad = results.filter(function(r){ return r.error; })[0];
+        if (bad) toast('Part of the log blew away: ' + bad.error.message);
       };
     };
   }
   openV('vFlag');
 }
 
-/* ---------- TREASURE CHEST ---------- */
+/* ================= TREASURE CHEST (this device, until the vault opens: Voyage II step 3) ================= */
 var pendingPhoto = null;
 function openChest(){
   var b = body('vChest');
@@ -402,10 +556,11 @@ function openChest(){
       '<input type="text" id="tCap" placeholder="what is this memory?"></div></div>' +
       '<div style="text-align:center;"><button class="wbtn" id="tSave">Into the chest</button></div>' +
     '</div><div id="tGrid"></div>';
-  if (!state.treasures.length) html += '<div class="notice">The chest waits for its first memory. Go and make one.</div>';
+  if (!local.treasures.length) html += '<div class="notice">The chest waits for its first memory. Go and make one.</div>';
+  html += '<p class="sub" style="margin-top:14px;">Treasures live on this device for now. The shared vault opens soon, and everything here sails with it.</p>';
   b.innerHTML = html;
   var grid = $('tGrid');
-  state.treasures.slice().reverse().forEach(function(t){
+  local.treasures.slice().reverse().forEach(function(t){
     var d = document.createElement('div'); d.className = 'pol';
     d.innerHTML = '<img alt=""><div class="cap"></div><div class="by"></div>';
     d.querySelector('img').src = t.imageRef;
@@ -417,8 +572,8 @@ function openChest(){
   $('tAdd').onclick = function(){ $('photoIn').value = ''; $('photoIn').click(); };
   $('tSave').onclick = function(){
     if (!pendingPhoto) return;
-    state.treasures.push({ imageRef:pendingPhoto, caption:$('tCap').value.trim(), addedBy:member().name, addedAt:new Date().toISOString() });
-    if (save()) openChest();
+    local.treasures.push({ imageRef:pendingPhoto, caption:$('tCap').value.trim(), addedBy:myName(), addedAt:new Date().toISOString() });
+    saveLocal(); reflectScene(); openChest();
   };
   openV('vChest');
 }
@@ -447,7 +602,7 @@ function bindPhotoInput(){
   });
 }
 
-/* ---------- ISLAND STONE ---------- */
+/* ================= ISLAND STONE ================= */
 function openStone(){
   var t = timeState();
   var lines = STONE_LINES[t];
@@ -457,15 +612,15 @@ function openStone(){
     '<div class="notice" style="font-size:16px;">' + esc(line) + '</div>' +
     '<p style="margin:14px 0 6px;">The runes glow and settle on a thought:</p>' +
     '<div class="advCard"><b>' + esc(sugg) + '</b></div>' +
-    '<button class="wbtn" id="sRaise">Raise the Colours for it</button>' +
+    (shared.flag.raised ? '<button class="wbtn" id="sChart">Chart it on the horizon</button>'
+                        : '<button class="wbtn" id="sRaise">Raise the Colours for it</button>') +
     '<p class="sub" style="margin-top:16px;">The Stone speaks from old wisdom for now. One day it will read the sky, the tides, the whales and the weather itself.</p>';
-  $('sRaise').onclick = function(){ raiseColours(sugg, ''); };
+  if ($('sRaise')) $('sRaise').onclick = function(){ raiseColours(sugg, ''); };
+  if ($('sChart')) $('sChart').onclick = function(){ chartHorizon(sugg, ''); closeV('vStone'); openBoard(); };
   openV('vStone');
 }
 
-/* ---------- COMPASS ---------- */
-var DIRS = [['North','the wild horizon'],['North-east','the morning water'],['East','the rising sun'],['South-east','the river mouth'],
-            ['South','the old mountain'],['South-west','the deep forest'],['West','the setting sun'],['North-west','the far headland']];
+/* ================= COMPASS ================= */
 function openCompass(){
   body('vCompass').innerHTML =
     '<div id="roseWrap"><svg width="150" height="150" viewBox="0 0 120 120">' +
@@ -489,136 +644,160 @@ function openCompass(){
   openV('vCompass');
 }
 
-/* ---------- CHRONICLE ---------- */
+/* ================= CHRONICLE ================= */
 function openChron(){
   var b = body('vChron');
-  var html = '<textarea id="chNew" class="journal" placeholder="Add to the Chronicle, ' + esc(member().name) + '…"></textarea>' +
+  var html = '<textarea id="chNew" class="journal" placeholder="Add to the Chronicle, ' + esc(myName()) + '…"></textarea>' +
     '<button class="wbtn" id="chSave">Record it</button>';
   html += '<div class="cat">The tales</div>';
-  if (!state.chronicle.length && !state.adventures.length) html += '<div class="notice">The Chronicle is unwritten. The first tale is always the hardest to start and the best to remember.</div>';
-  state.chronicle.slice().reverse().forEach(function(c){
+  if (!shared.chronicle.length && !shared.adventures.length) html += '<div class="notice">The Chronicle is unwritten. The first tale is always the hardest to start and the best to remember.</div>';
+  shared.chronicle.slice().reverse().forEach(function(c){
     html += '<div class="advCard"><span class="entryHand">' + esc(c.entry) + '</span><br>' +
       '<span style="font-size:12px; color:#8a765a; font-style:italic;">' + esc(c.author) + ' · ' + new Date(c.date).toLocaleDateString() + '</span></div>';
   });
-  if (state.adventures.length){
-    html += '<div class="cat">Adventures completed: ' + state.adventures.length + '</div>';
-    state.adventures.slice().reverse().forEach(function(a){
+  if (shared.adventures.length){
+    html += '<div class="cat">Adventures completed: ' + shared.adventures.length + '</div>';
+    shared.adventures.slice().reverse().forEach(function(a){
       html += '<div style="font-size:13.5px; margin:4px 0;">&#9873; ' + esc(a.title) + ' · ' + new Date(a.completedAt).toLocaleDateString() + '</div>';
     });
   }
-  if (state.rewards.chaosChampions.length){
+  var champs = shared.adventures.filter(function(a){ return a.chaosChampion; });
+  if (champs.length){
     html += '<div class="cat">Chaos Champions</div>';
-    state.rewards.chaosChampions.slice().reverse().forEach(function(cc){
-      html += '<div style="font-size:13.5px; margin:4px 0;">&#9733; ' + esc(cc.name) + ' &middot; ' + esc(cc.adventure) + ' &middot; ' + new Date(cc.date).toLocaleDateString() + '</div>';
+    champs.slice().reverse().forEach(function(cc){
+      html += '<div style="font-size:13.5px; margin:4px 0;">&#9733; ' + esc(cc.chaosChampion) + ' &middot; ' + esc(cc.title) + ' &middot; ' + new Date(cc.completedAt).toLocaleDateString() + '</div>';
     });
   }
   html += '<div class="cat">The Shanty of Ansla</div>';
-  if (!state.rewards.shanty.length){
+  if (!shared.shanty.length){
     html += '<div class="notice">The song awaits its first line. Win the day on an adventure and write it.</div>';
   } else {
-    state.rewards.shanty.forEach(function(s){
+    shared.shanty.forEach(function(s){
       html += '<div style="font-style:italic; margin:5px 0; font-size:15px;">&ldquo;' + esc(s.line) + '&rdquo; <span style="font-size:11.5px; color:#8a765a;">' + esc(s.author) + '</span></div>';
     });
   }
   b.innerHTML = html;
-  $('chSave').onclick = function(){
+  $('chSave').onclick = async function(){
     var v = $('chNew').value.trim(); if (!v) return;
-    state.chronicle.push({ entry:v, author:member().name, date:new Date().toISOString() });
-    save(); openChron();
+    shared.chronicle.push({ entry:v, author:myName(), date:new Date().toISOString() });
+    if (online){
+      var r = await sb.from('chronicle').insert({ entry:v, author:myName() });
+      if (r.error) toast('The ink ran: ' + r.error.message);
+    }
+    openChron();
   };
   openV('vChron');
 }
 
-/* ---------- CHAOS ---------- */
-function openChaos(){
+/* ================= CHAOS ================= */
+function allAboard(){
+  if (!shared.flag.raised) return false;
+  return members.every(function(c){ return shared.flag.joining.indexOf(c.name) !== -1; });
+}
+async function openChaos(){
   var b = body('vChaos');
-  if (!state.flag.raised){
+  if (!shared.flag.raised){
     b.innerHTML = '<div style="text-align:center; padding:14px 4px;"><p style="font-size:17px; font-style:italic;">' +
-      esc(CHAOS_LINES[Math.floor(Math.random() * CHAOS_LINES.length)]) + '</p>' +
+      esc(CHAOS_TEASES[Math.floor(Math.random() * CHAOS_TEASES.length)]) + '</p>' +
       '<p style="font-size:13px; color:#8f7cad; margin-top:14px;">It wakes only when the colours fly and every crew member is aboard.</p></div>';
-  } else if (!allAboard()){
-    var missing = CREW.filter(function(c){ return state.flag.joining.indexOf(c.name) === -1; })
-                      .map(function(c){ return c.name; }).join(' and ');
+  } else if (!shared.chaos.deployed && !allAboard()){
+    var missing = members.filter(function(c){ return shared.flag.joining.indexOf(c.name) === -1; })
+                         .map(function(c){ return c.name; }).join(' and ');
     b.innerHTML = '<div style="text-align:center; padding:14px 4px;"><p style="font-size:17px; font-style:italic;">The crystal stirs&hellip; but waits for the whole crew.</p>' +
       '<p style="font-size:13.5px; color:#8f7cad; margin-top:12px;">' + esc(missing) + ' ' + (missing.indexOf(' and ') !== -1 ? 'have' : 'has') + ' not yet joined the adventure.</p></div>';
-  } else if (!state.chaos.deployed){
+  } else if (!shared.chaos.deployed){
     b.innerHTML = '<div style="text-align:center; padding:10px 4px;">' +
       '<p style="font-size:18px; letter-spacing:.08em;">THE CRYSTAL IS LIVE.</p>' +
       '<p style="font-size:14px; font-style:italic; color:#8f7cad; margin:12px 0 18px;">All crew aboard. One touch, and every member of this crew receives a secret mission. Evidence goes in the Treasure Chest. The crew votes a Chaos Champion when the colours are struck.</p>' +
       '<button class="wbtn" id="xGo" style="background:#4a2a72; border-color:#2a1444;">Unleash the chaos</button></div>';
-    $('xGo').onclick = function(){
-      var pool = CHAOS_MISSIONS.slice();
-      var missions = {};
-      CREW.forEach(function(c){
-        var i = Math.floor(Math.random() * pool.length);
-        missions[c.id] = pool.splice(i, 1)[0];
-      });
-      state.chaos = { deployed:true, deployedBy:member().name, missions:missions, deployedAt:new Date().toISOString() };
-      save(); openChaos();
+    $('xGo').onclick = async function(){
+      if (!online) return toast('Chaos needs the whole island connected.');
+      var r = await sb.rpc('deploy_chaos');
+      if (r.error || r.data !== true) return toast('The crystal resisted. Try again.');
+      shared.chaos = { deployed:true, deployedBy:myName() };
+      reflectScene(); openChaos();
     };
   } else {
+    var mine = '';
+    if (online){
+      var r = await sb.rpc('my_mission');
+      mine = r.data || '';
+    }
     b.innerHTML = '<div style="padding:6px 2px;">' +
-      '<p style="font-size:12.5px; letter-spacing:.14em; color:#8f7cad; text-transform:uppercase;">Chaos was unleashed by ' + esc(state.chaos.deployedBy) + '</p>' +
-      '<p style="margin:14px 0 6px; font-size:15px;">Your secret mission, ' + esc(member().name) + '. Yours alone. Tell no one:</p>' +
+      '<p style="font-size:12.5px; letter-spacing:.14em; color:#8f7cad; text-transform:uppercase;">Chaos was unleashed by ' + esc(shared.chaos.deployedBy || 'someone') + '</p>' +
+      '<p style="margin:14px 0 6px; font-size:15px;">Your secret mission, ' + esc(myName()) + '. Yours alone. Tell no one:</p>' +
       '<div style="border:1px solid #4a3468; border-radius:6px; background:rgba(120,60,200,.10); padding:14px 16px; font-size:16px; font-style:italic;">' +
-      esc(state.chaos.missions[member().id] || 'The crystal has nothing for you. Suspicious in itself.') + '</div>' +
+      esc(mine || 'The crystal is keeping your mission from prying eyes. Reconnect to receive it.') + '</div>' +
       '<p style="font-size:13px; color:#8f7cad; margin-top:14px;">Evidence in the Treasure Chest. The crew votes the Chaos Champion when the colours are struck.</p></div>';
   }
   openV('vChaos');
 }
 
-/* ---------- PLANT AN IDEA ---------- */
+/* ================= PLANT AN IDEA ================= */
 function openIdeas(){
   var b = body('vIdeas');
   var html = '<input type="text" id="idNew" placeholder="Poker night? Sunday BBQ? Plant it&hellip;">' +
     '<button class="wbtn" id="idPlant">Plant it</button>';
-  if (!state.ideas.length) html += '<div class="notice">Nothing planted yet. Ideas grow into adventures here.</div>';
+  if (!shared.ideas.length) html += '<div class="notice">Nothing planted yet. Ideas grow into adventures here.</div>';
   else html += '<div class="cat">Growing on the board</div>';
-  state.ideas.slice().reverse().forEach(function(idea, ri){
-    var realIdx = state.ideas.length - 1 - ri;
+  shared.ideas.slice().reverse().forEach(function(idea, ri){
+    var realIdx = shared.ideas.length - 1 - ri;
     html += '<div class="advCard"><b style="font-size:15px;">' + esc(idea.text) + '</b><br>' +
       '<span style="font-size:12px; color:#8a765a; font-style:italic;">planted by ' + esc(idea.plantedBy) + ' · ' + new Date(idea.plantedAt).toLocaleDateString() + '</span><br>' +
       '<button class="wbtn ghost idGrow" data-i="' + realIdx + '" style="margin-top:8px; font-size:13px;">' +
-      (state.flag.raised ? 'Chart it on the horizon' : 'Raise the Colours for it') + '</button>' +
+      (shared.flag.raised ? 'Chart it on the horizon' : 'Raise the Colours for it') + '</button>' +
       '</div>';
   });
   b.innerHTML = html;
-  $('idPlant').onclick = function(){
+  $('idPlant').onclick = async function(){
     var v = $('idNew').value.trim(); if (!v) return;
-    state.ideas.push({ text:v, plantedBy:member().name, plantedAt:new Date().toISOString() });
-    save(); openIdeas();
+    shared.ideas.push({ text:v, plantedBy:myName(), plantedAt:new Date().toISOString() });
+    if (online){
+      var r = await sb.from('ideas').insert({ idea:v, planted_by:myName() });
+      if (r.error) toast('The seed blew away: ' + r.error.message); else fetchIdeas();
+    }
+    openIdeas();
   };
   b.querySelectorAll('.idGrow').forEach(function(el){
     el.onclick = function(){
-      var idea = state.ideas[parseInt(el.getAttribute('data-i'), 10)];
+      var idea = shared.ideas[parseInt(el.getAttribute('data-i'), 10)];
       if (!idea) return;
-      if (state.flag.raised){
-        state.horizon.push({ title:idea.text, when:'', chartedBy:member().name, chartedAt:new Date().toISOString() });
-        save(); openIdeas();
-      } else {
-        raiseColours(idea.text, '');
-      }
+      if (shared.flag.raised){ chartHorizon(idea.text, ''); openIdeas(); }
+      else raiseColours(idea.text, '');
     };
   });
   openV('vIdeas');
 }
 
-/* ---------- THE CALL ---------- */
+/* ================= THE CALL ================= */
 function openCall(){
-  body('vCall').innerHTML = state.flag.raised
+  body('vCall').innerHTML = shared.flag.raised
     ? '<div class="notice">The colours are raised! One day the drums will sound on every crew member’s phone the moment this happens. For now, word travels the old way.</div>'
     : '<div class="notice">The drums are quiet. They sound when the colours are raised, and one voyage soon, they will reach the whole crew wherever they roam.</div>';
   openV('vCall');
 }
 
-/* ---------- CREW ---------- */
+/* ================= CREW ================= */
 function openCrew(){
   var b = body('vCrew'); b.innerHTML = '';
-  CREW.forEach(function(c){
+  members.forEach(function(c){
     var d = document.createElement('button');
     d.className = 'crewBtn'; d.style.margin = '8px 0';
-    d.innerHTML = esc(c.name) + (c.id === state.crew.currentMemberId ? ' &#10004;' : '') + '<small>' + esc(c.role) + '</small>';
-    d.onclick = function(){ state.crew.currentMemberId = c.id; save(); applyTime(); openCrew(); };
+    d.innerHTML = esc(c.name) + (c.name === myName() ? ' &#10004;' : '') + '<small>' + esc(c.role) + '</small>';
+    d.onclick = async function(){
+      if (c.name === myName()) return;
+      if (!online) return toast('Changing crew needs the island connected.');
+      var r = await sb.rpc('join_crew', { code:'', member:c.id });
+      if (r.error || r.data !== true){
+        var code = prompt('The island asks for the crew code to change who you are:');
+        if (!code) return;
+        r = await sb.rpc('join_crew', { code:code, member:c.id });
+        if (r.error || r.data !== true) return toast('The island does not answer to that knock.');
+      }
+      me = { id:c.id, name:c.name, role:c.role };
+      local.memberName = c.name; saveLocal();
+      applyTime(); openCrew();
+    };
     b.appendChild(d);
   });
   var note = document.createElement('div'); note.className = 'notice'; note.textContent = FUTURE_CREW;
@@ -626,31 +805,44 @@ function openCrew(){
   openV('vCrew');
 }
 
-/* ---------- SETTINGS ---------- */
+/* ================= HIDE & SEEK ================= */
+async function toggleLantern(){
+  shared.hideSeek.active = !shared.hideSeek.active;
+  reflectLantern();
+  if (online){
+    var r = await sb.from('hide_seek').update({ active:shared.hideSeek.active, started_at:shared.hideSeek.active ? new Date().toISOString() : null }).eq('id', 1);
+    if (r.error) toast('The lantern guttered: ' + r.error.message);
+  }
+}
+
+/* ================= SETTINGS ================= */
 function openSettings(){
   var b = body('vSettings');
   b.innerHTML = '<div class="cat">Light on the island</div>' +
     '<p style="font-size:13.5px; margin:6px 0;">The island follows the real sky. Override it to preview:</p><div id="todRow"></div>' +
-    '<div class="cat">Danger below decks</div>' +
-    '<button class="wbtn ghost" id="sgReset">Begin again (wipes everything)</button>' +
-    '<p class="sub" style="margin-top:14px;">Escape from Ansla Island &middot; Voyage I mock-up &middot; nothing leaves this device.</p>';
+    '<div class="cat">This device</div>' +
+    '<p style="font-size:13.5px; margin:6px 0;">Signed on as ' + esc(myName()) + (online ? ' · sailing with the crew' : ' · beyond the reef (offline)') + '</p>' +
+    '<button class="wbtn ghost" id="sgReset">This device forgets the island</button>' +
+    '<p class="sub" style="margin-top:14px;">Escape from Ansla Island &middot; Voyage II &middot; shared with the crew; photos stay on this device until the vault opens.</p>';
   var row = $('todRow');
   ['auto','dawn','day','dusk','night'].forEach(function(t){
     var btn = document.createElement('button');
-    btn.className = (state.settings.timeOverride === t) ? 'wbtn' : 'wbtn ghost';
+    btn.className = (local.settings.timeOverride === t) ? 'wbtn' : 'wbtn ghost';
     btn.textContent = t.charAt(0).toUpperCase() + t.slice(1);
-    btn.onclick = function(){ state.settings.timeOverride = t; save(); applyTime(); openSettings(); };
+    btn.onclick = function(){ local.settings.timeOverride = t; saveLocal(); applyTime(); openSettings(); };
     row.appendChild(btn);
   });
   var armed = false;
-  $('sgReset').onclick = function(){
-    if (!armed){ armed = true; $('sgReset').textContent = 'Truly? All tales, treasures and the shanty will sink. Tap again to be sure.'; return; }
-    localStorage.removeItem(STORE_KEY); location.reload();
+  $('sgReset').onclick = async function(){
+    if (!armed){ armed = true; $('sgReset').textContent = 'Truly? This device will need the crew code again. The shared island is untouched. Tap again.'; return; }
+    try { if (sb) await sb.auth.signOut(); } catch(e){}
+    localStorage.removeItem(LOCAL_KEY); localStorage.removeItem(CACHE_KEY);
+    location.reload();
   };
   openV('vSettings');
 }
 
-/* ---------- ROLLO ---------- */
+/* ================= ROLLO ================= */
 function rolloBark(){
   var fx = $('rolloFx');
   fx.classList.remove('bark'); void fx.offsetWidth; fx.classList.add('bark');
@@ -663,47 +855,15 @@ function rolloIdleLoop(){
   }, IDLE_MIN + Math.random() * (IDLE_MAX - IDLE_MIN));
 }
 
-/* ---------- LANTERN / HIDE & SEEK ---------- */
-function toggleLantern(){
-  state.hideSeek.active = !state.hideSeek.active;
-  if (state.hideSeek.active) state.hideSeek.startedAt = new Date().toISOString();
-  save(); reflectLantern();
-}
-function reflectLantern(){
-  $('lanternGlow').classList.toggle('on', !!state.hideSeek.active);
-  $('hsBanner').classList.toggle('show', !!state.hideSeek.active);
-}
-
-/* ---------- FIRST RUN ---------- */
-function firstRun(){
-  var fr = $('firstRun'); fr.classList.add('open');
-  var wrap = $('frCrew'); wrap.innerHTML = '';
-  CREW.forEach(function(c){
-    var btn = document.createElement('button');
-    btn.className = 'crewBtn';
-    btn.innerHTML = esc(c.name) + '<small>' + esc(c.role) + '</small>';
-    btn.onclick = function(){
-      state.crew.currentMemberId = c.id;
-      $('frLead').style.display = 'none'; wrap.style.display = 'none';
-      $('frMotif').style.display = 'block';
-    };
-    wrap.appendChild(btn);
-  });
-  $('frHoist').onclick = function(){
-    state.motif.chosen = 'ansla-emblem';
-    save(); fr.classList.remove('open'); applyTime();
-  };
-}
-
-/* ---------- WIRING ---------- */
+/* ================= WIRING ================= */
 function bindHotspot(id, fn){
   $(id).addEventListener('click', function(e){
     if (wasDrag()) return;
     ripple(e); setTimeout(fn, 160);
   });
 }
-function init(){
-  load();
+async function init(){
+  loadLocal(); cachePaint();
   layout(); bindDrag(); bindPhotoInput();
   document.querySelector('#scene img.bg').addEventListener('load', layout);
   applyTime(); reflectLantern(); reflectScene();
@@ -730,7 +890,8 @@ function init(){
   window.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAll(); });
   rolloIdleLoop();
   setTimeout(function(){ $('hint').classList.add('gone'); }, 6000);
-  if (!state.crew.currentMemberId || !state.motif.chosen) firstRun();
+  try { await connect(); }
+  catch(e){ offlineMode(); }
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

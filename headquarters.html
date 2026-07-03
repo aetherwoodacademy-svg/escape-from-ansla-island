@@ -40,8 +40,14 @@
 <div id="firstRun"><div id="frInner">
   <img class="emblem" src="art/concepts/ansla-emblem.png" alt="The Colours of Ansla">
   <h1>Escape from Ansla Island</h1>
-  <p id="frLead">Who steps ashore?</p>
-  <div id="frCrew"></div>
+  <p id="frLead">Speak the crew code.</p>
+  <div id="frCode">
+    <input type="text" id="codeIn" placeholder="the secret knock&hellip;" autocomplete="off"
+      style="width:100%; background:rgba(255,250,235,.9); border:1px solid #6b4a2a; border-radius:6px; padding:14px; font-family:inherit; font-size:17px; text-align:center; color:#2f2213;">
+    <button class="crewBtn" id="codeGo">Knock</button>
+    <p id="codeErr" style="color:#d98a6a; font-style:italic; min-height:20px;"></p>
+  </div>
+  <div id="frCrew" style="display:none"></div>
   <div id="frMotif" style="display:none">
     <p style="color:#e8d9b5; font-style:normal;">These are the Colours of Ansla.<br>They fly over Headquarters until new colours are earned.</p>
     <button class="crewBtn" id="frHoist">Hoist the Colours</button>
@@ -105,6 +111,7 @@
 
 <input type="file" id="photoIn" accept="image/*" style="display:none">
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/headquarters.js"></script>
 </body>
 </html>
