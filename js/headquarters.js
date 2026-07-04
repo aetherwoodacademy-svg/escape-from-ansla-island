@@ -670,6 +670,7 @@ function openFlag(){
       '<div class="advCard"><b>' + esc(shared.flag.adventure) + '</b>' + (shared.flag.when ? '<br>' + esc(shared.flag.when) : '') +
       '<br><span style="font-size:13px;color:#7a5a32;">Raised by ' + esc(shared.flag.raisedBy) + ' &middot; crew aboard: ' + esc(shared.flag.joining.join(', ')) + '</span></div>' +
       '<button class="wbtn" id="fStrike">Strike the Colours (we are home)</button>' +
+      '<button class="wbtn ghost" id="fStandDown" style="margin-top:8px; font-size:13px;">Stand down (this was a test, don\'t log it)</button>' +
       '<div id="logForm" style="display:none; margin-top:14px;">' +
         '<div class="cat">Log the adventure</div>' +
         '<p style="font-size:14px; margin:8px 0;">Who won the day? The winner writes the next line of the shanty.</p>' +
@@ -681,8 +682,29 @@ function openFlag(){
         '<textarea id="chronNote" class="journal" placeholder="A few words for the Chronicle: what happened out there?"></textarea>' +
         '<button class="wbtn" id="fLog">Seal it in the Chronicle</button>' +
       '</div>';
+    var standArmed = false;
+    $('fStandDown').onclick = async function(){
+      if (!standArmed){
+        standArmed = true;
+        $('fStandDown').textContent = 'Truly? Nothing will be logged, no chronicle, no shanty line. Tap again.';
+        return;
+      }
+      var hadChaos = shared.chaos.deployed;
+      shared.flag = { raised:false, adventure:null, when:null, raisedBy:null, joining:[] };
+      shared.chaos = { deployed:false, deployedBy:null };
+      reflectScene();
+      closeV('vFlag');
+      toast('Stood down. Nothing logged.');
+      if (!online) return;
+      var jobs = [
+        sb.from('flag').update({ raised:false, adventure:null, when_label:null, raised_by:null, joining:[], raised_at:null, updated_at:new Date().toISOString() }).eq('id', 1)
+      ];
+      if (hadChaos) jobs.push(sb.rpc('reset_chaos'));
+      await Promise.all(jobs);
+    };
     $('fStrike').onclick = function(){
       $('fStrike').style.display = 'none';
+      $('fStandDown').style.display = 'none';
       $('logForm').style.display = 'block';
       var winner = null, champ = null;
       function pickRow(rowEl, mark, setter){
@@ -1189,7 +1211,8 @@ function openIdeas(){
     html += '<div class="advCard"><b style="font-size:15px;">' + esc(idea.text) + '</b><br>' +
       '<span style="font-size:12px; color:#8a765a; font-style:italic;">planted by ' + esc(idea.plantedBy) + ' · ' + new Date(idea.plantedAt).toLocaleDateString() + '</span><br>' +
       '<button class="wbtn ghost idGrow" data-i="' + realIdx + '" style="margin-top:8px; font-size:13px;">' +
-      (shared.flag.raised ? 'Chart it on the horizon' : 'Raise the Colours for it') + '</button>' +
+      (shared.flag.raised ? 'Chart it on the horizon' : 'Raise the Colours for it') + '</button> ' +
+      '<button class="wbtn ghost idRemove" data-i="' + realIdx + '" style="margin-top:8px; font-size:13px;">Pull it up</button>' +
       '</div>';
   });
   b.innerHTML = html;
@@ -1208,6 +1231,16 @@ function openIdeas(){
       if (!idea) return;
       if (shared.flag.raised){ chartHorizon(idea.text, ''); openIdeas(); }
       else raiseColours(idea.text, '');
+    };
+  });
+  b.querySelectorAll('.idRemove').forEach(function(el){
+    el.onclick = async function(){
+      var idx = parseInt(el.getAttribute('data-i'), 10);
+      var idea = shared.ideas[idx];
+      if (!idea) return;
+      shared.ideas.splice(idx, 1);
+      openIdeas();
+      if (online && idea.id) await sb.from('ideas').delete().eq('id', idea.id);
     };
   });
   openV('vIdeas');
