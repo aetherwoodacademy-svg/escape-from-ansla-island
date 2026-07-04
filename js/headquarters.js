@@ -54,6 +54,13 @@ var GREETINGS = { dawn:'Good morning, Captain.', day:'Good day, Captain.', dusk:
 var WHEN_CHOICES = ['At first light','Midmorning','High sun','Golden hour','Under the stars','When the drums sound'];
 var IDLE_MIN = 20000, IDLE_MAX = 45000;
 var PHOTO_MAX_EDGE = 700, PHOTO_QUALITY = 0.7;
+var HOME_SHORE = { lat:-26.6528, lng:153.0921, name:'Maroochydore' };
+var METEOR_SHOWERS = [
+  { name:'the Quadrantids', from:'01-01', to:'01-06' },
+  { name:'the Eta Aquariids', from:'04-28', to:'05-10' },
+  { name:'the Orionids', from:'10-16', to:'10-28' },
+  { name:'the Geminids', from:'12-10', to:'12-16' }
+];
 var HUNT_PUBLISH_MS = { close:10000, long:60000 };
 var HUNT_CUES = [
   [0.05, 'EEK! The cat is at the door! Do not even breathe!'],
@@ -788,22 +795,156 @@ function bindPhotoInput(){
   });
 }
 
-/* ================= ISLAND STONE ================= */
-function openStone(){
-  var t = timeState();
-  var lines = STONE_LINES[t];
-  var line = lines[Math.floor(Math.random() * lines.length)];
-  var sugg = STONE_SUGGEST[t][Math.floor(Math.random() * STONE_SUGGEST[t].length)];
-  body('vStone').innerHTML =
-    '<div class="notice" style="font-size:16px;">' + esc(line) + '</div>' +
-    '<p style="margin:14px 0 6px;">The runes glow and settle on a thought:</p>' +
+/* ================= ISLAND STONE (the senses, Voyage IV) ================= */
+function moonPhase(d){
+  /* synodic month from a known new moon (2000-01-06 18:14 UTC) */
+  var synodic = 29.53058867;
+  var days = (d.getTime() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000;
+  var phase = ((days % synodic) + synodic) % synodic / synodic; /* 0 new → .5 full */
+  var name;
+  if (phase < 0.03 || phase > 0.97) name = 'a new moon';
+  else if (phase < 0.22) name = 'a waxing crescent';
+  else if (phase < 0.28) name = 'a first quarter moon';
+  else if (phase < 0.47) name = 'a waxing moon';
+  else if (phase < 0.53) name = 'a full moon';
+  else if (phase < 0.72) name = 'a waning moon';
+  else if (phase < 0.78) name = 'a last quarter moon';
+  else name = 'a waning crescent';
+  return { phase:phase, name:name };
+}
+function activeShower(d){
+  var mmdd = ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  for (var i = 0; i < METEOR_SHOWERS.length; i++){
+    var s = METEOR_SHOWERS[i];
+    if (mmdd >= s.from && mmdd <= s.to) return s;
+  }
+  return null;
+}
+function fetchJson(url, ms){
+  return new Promise(function(resolve){
+    var ctl = new AbortController();
+    var to = setTimeout(function(){ ctl.abort(); resolve(null); }, ms || 6000);
+    fetch(url, { signal:ctl.signal }).then(function(r){ return r.json(); })
+      .then(function(j){ clearTimeout(to); resolve(j); })
+      .catch(function(){ clearTimeout(to); resolve(null); });
+  });
+}
+async function stoneCoords(){
+  try {
+    if (navigator.permissions && navigator.geolocation && window.isSecureContext){
+      var st = await navigator.permissions.query({ name:'geolocation' });
+      if (st.state === 'granted'){
+        var pos = await new Promise(function(res){
+          navigator.geolocation.getCurrentPosition(function(p){ res(p); }, function(){ res(null); }, { timeout:3000, maximumAge:600000 });
+        });
+        if (pos) return { lat:pos.coords.latitude, lng:pos.coords.longitude };
+      }
+    }
+  } catch(e){}
+  return HOME_SHORE;
+}
+var stoneCache = null, stoneCacheAt = 0;
+async function stoneSenses(){
+  if (stoneCache && Date.now() - stoneCacheAt < 15 * 60000) return stoneCache;
+  var c = await stoneCoords();
+  var wUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + c.lat + '&longitude=' + c.lng +
+    '&current=temperature_2m,weather_code,wind_speed_10m,uv_index&daily=weather_code,uv_index_max,precipitation_probability_max,sunrise,sunset&timezone=auto&forecast_days=2';
+  var mUrl = 'https://marine-api.open-meteo.com/v1/marine?latitude=' + c.lat + '&longitude=' + c.lng +
+    '&hourly=sea_level_height_msl&timezone=auto&forecast_days=2';
+  var res = await Promise.all([fetchJson(wUrl), fetchJson(mUrl)]);
+  var senses = { weather:res[0], marine:res[1] };
+  if (senses.weather){ stoneCache = senses; stoneCacheAt = Date.now(); }
+  return senses;
+}
+function nextTideTurn(marine){
+  try {
+    var hs = marine.hourly, now = new Date();
+    var vals = hs.sea_level_height_msl, times = hs.time;
+    var startIdx = 0;
+    for (var i = 0; i < times.length; i++){ if (new Date(times[i]) > now){ startIdx = Math.max(1, i); break; } }
+    for (var j = startIdx; j < vals.length - 1; j++){
+      if (vals[j] > vals[j-1] && vals[j] > vals[j+1]) return { kind:'high', at:new Date(times[j]) };
+      if (vals[j] < vals[j-1] && vals[j] < vals[j+1]) return { kind:'low', at:new Date(times[j]) };
+    }
+  } catch(e){}
+  return null;
+}
+function interpretStone(senses){
+  var lines = [], sugg = [], marg = [];
+  var now = new Date(), t = timeState(), moon = moonPhase(now), shower = activeShower(now);
+  var month = now.getMonth() + 1;
+  var w = senses.weather && senses.weather.current;
+  var daily = senses.weather && senses.weather.daily;
+  var code = w ? w.weather_code : null;
+  var codeTomorrow = daily && daily.weather_code ? daily.weather_code[1] : null;
+  var uv = w ? Math.round(w.uv_index) : null;
+  var uvMax = daily && daily.uv_index_max ? Math.round(daily.uv_index_max[0]) : null;
+  var wind = w ? Math.round(w.wind_speed_10m) : null;
+  var rainProb = daily && daily.precipitation_probability_max ? daily.precipitation_probability_max[0] : null;
+  var thunderNow = code >= 95, thunderSoon = codeTomorrow >= 95 || (daily && daily.weather_code && daily.weather_code[0] >= 95);
+  var rainingNow = code >= 51 && code <= 82 && !thunderNow;
+
+  if (thunderNow){ lines.push('Thunder walks the land RIGHT NOW. This crew knows what that means.'); sugg.push(['Storm watching', 10]); }
+  else if (thunderSoon){ lines.push('The Stone feels thunder coming. The sky is owing us a show.'); sugg.push(['Storm watching', 8]); }
+  if (rainingNow){ lines.push('The rain means to stay a while. Let it. The table is dry and the kettle works.'); sugg.push(['Board games', 6], ['Movie night', 6]); }
+  if (!thunderNow && !rainingNow && uv !== null && uv >= 9 && (t === 'day')){ lines.push('The sun rules today with a heavy hand. Choose water, shade, or rollercoasters.'); sugg.push(['River swimming', 6], ['Dreamworld', 5]); }
+  if (month >= 6 && month <= 11){ lines.push('The whales are passing the home shore. They only knock once a year.'); sugg.push(['Whale watching', 5]); }
+  if (shower){ lines.push('Stones fall from heaven this week: ' + shower.name + ' are flying.'); sugg.push(['Astrophotography', 7], ['Stargazing', 6]); }
+  if (t === 'night' || t === 'dusk'){
+    if (moon.phase < 0.1 || moon.phase > 0.92){ lines.push('The moon hides tonight; the stars come out to gossip.'); sugg.push(['Stargazing', 6], ['Astrophotography', 5]); }
+    if (moon.phase > 0.44 && moon.phase < 0.56){ lines.push('The moon is full and the paths are silver.'); sugg.push(['Moonlit walk', 7]); }
+  }
+  if (!thunderNow && !rainingNow && wind !== null && wind <= 12 && (t === 'dawn' || t === 'day')){ lines.push('The water lies like glass. It will not wait all day.'); sugg.push(['SUP', 5], ['Kayaking', 5], ['The tinny', 4]); }
+  if (wind !== null && wind >= 30){ lines.push('The wind has opinions today. Keep the small boats sleeping.'); }
+  var tide = senses.marine ? nextTideTurn(senses.marine) : null;
+  if (tide && tide.kind === 'low' && (t === 'dawn' || t === 'day')){ sugg.push(['Fishing', 4], ['Beach walk', 3]); }
+
+  if (!lines.length){
+    var seeded = STONE_LINES[t];
+    lines.push(seeded[Math.floor(Math.random() * seeded.length)]);
+  }
+  if (!sugg.length){
+    var pool = STONE_SUGGEST[t];
+    sugg.push([pool[Math.floor(Math.random() * pool.length)], 1]);
+  }
+  sugg.sort(function(a, b){ return b[1] - a[1]; });
+
+  if (w) marg.push(Math.round(w.temperature_2m) + '°');
+  if (uvMax !== null) marg.push('UV ' + uvMax);
+  if (wind !== null) marg.push('wind ' + wind);
+  if (rainProb !== null) marg.push('rain ' + rainProb + '%');
+  if (tide) marg.push(tide.kind + ' tide ' + tide.at.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' }));
+  marg.push(moon.name);
+
+  return { lines:lines.slice(0, 3), suggestion:sugg[0][0], marginalia:marg.join(' · ') };
+}
+async function openStone(){
+  var b = body('vStone');
+  b.innerHTML = '<div class="notice" style="font-size:16px;">The runes wake and read the world&hellip;</div>';
+  openV('vStone');
+  var reading = null;
+  if (online && navigator.onLine !== false){
+    try { reading = interpretStone(await stoneSenses()); } catch(e){ reading = null; }
+  }
+  if (!reading){
+    var t = timeState();
+    reading = {
+      lines:[STONE_LINES[t][Math.floor(Math.random() * STONE_LINES[t].length)]],
+      suggestion:STONE_SUGGEST[t][Math.floor(Math.random() * STONE_SUGGEST[t].length)],
+      marginalia:'the Stone reads from memory; the sky is out of reach'
+    };
+  }
+  var sugg = reading.suggestion;
+  var html = '';
+  reading.lines.forEach(function(l){ html += '<div class="notice" style="font-size:16px;">' + esc(l) + '</div>'; });
+  html += '<p style="margin:14px 0 6px;">The runes settle on a thought:</p>' +
     '<div class="advCard"><b>' + esc(sugg) + '</b></div>' +
     (shared.flag.raised ? '<button class="wbtn" id="sChart">Chart it on the horizon</button>'
                         : '<button class="wbtn" id="sRaise">Raise the Colours for it</button>') +
-    '<p class="sub" style="margin-top:16px;">The Stone speaks from old wisdom for now. One day it will read the sky, the tides, the whales and the weather itself.</p>';
+    '<p class="sub" style="margin-top:16px; letter-spacing:.06em;">' + esc(reading.marginalia) + '</p>';
+  b.innerHTML = html;
   if ($('sRaise')) $('sRaise').onclick = function(){ raiseColours(sugg, ''); };
   if ($('sChart')) $('sChart').onclick = function(){ chartHorizon(sugg, ''); closeV('vStone'); openBoard(); };
-  openV('vStone');
 }
 
 /* ================= THE REAL COMPASS ================= */
