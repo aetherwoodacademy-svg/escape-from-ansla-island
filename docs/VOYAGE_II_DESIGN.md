@@ -33,6 +33,7 @@ One `island` (future-proofing if Ansla ever hosts more than one family), then:
 - `treasures` — caption, author, adventure link, photo path (file itself in a **private Storage bucket**)
 - `chronicle` — entries (text, author, date)
 - `shanty_lines` — line, author, earned date (the one true song)
+- `shanty_chorus` — single row: text (locked 4 Jul 2026, carries Dadrew's founding credit), revealed (flips true when the first shanty_line is earned; chorus then plays alongside every verse after)
 - `chaos` — current deployment + **missions kept secret per member** (each phone can only read its own mission; true secrecy at last, enforced server-side)
 - `hide_seek` — active state (the lantern lights on every phone)
 

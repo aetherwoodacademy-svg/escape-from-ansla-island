@@ -16,12 +16,35 @@ var LIBRARY = {
   'Fire and camp': ['Campfire','Camping'],
   'Treasure hunting': ['Goldpanning','Fossicking','Antique hunting'],
   'Big days out': ['Dreamworld','SEA LIFE'],
-  'Home ports': ['Movie night','Board games','Quiz night']
+  'Home ports': ['Movie night','Board games','Quiz night'],
+  'Dadrew\'s Almanac': [
+    'Mt Coolum New Year\'s Hike and Beach Picnic','SEA LIFE (Nov)','Dreamworld (Jan)',
+    'Gardners Falls – Maleny, Swimming Hole','Buderim Forest Park – Waterfall and Shaded Trails',
+    'Kondalilla Falls – Full Circuit Hike','Noosa National Park – Coastal Walks and Secluded Beaches',
+    'Mapleton Falls and National Park','Mt Coolum Sunrise Climb and Coolum Beach',
+    'Wappa Falls – Swimming and Picnic',
+    'SEA LIFE (Mar)','Mary Cairncross Scenic Reserve – Glass House Mountain Views',
+    'Baroon Pocket Dam – Walk or Paddleboarding','Mt Ninderry Hike – Hinterland Views',
+    'Mt Ngungun Climb – Family-Friendly Adventure','Glass House Mountains Lookout Circuit',
+    'Dreamworld (Apr)','Eumundi Conservation Park Walk and Markets',
+    'Bribie Island – Coastal Walks and Birdwatching','Noosa Everglades Eco Tour – Tranquil Waterways',
+    'SEA LIFE (May)','Tibrogargan Circuit – Glass House Mountains','Mt Beerburrum Climb and Picnic',
+    'Mt Tinbeerwah Sunset Hike','Boreen Point Foreshore – Relaxing Day','Dreamworld (Jun)',
+    'Caloundra Coastal Pathway Walk to Moffat Beach','Noosa Botanic Gardens – Lakeside Afternoon',
+    'Mt Cooroora (Pomona) Hike','Glass House Mountains Interpretive Centre and Trails',
+    'Mt Coochin Climb – Lesser-Known Adventure','SEA LIFE (Jul)','Rainbow Beach – Coloured Sands and Walks',
+    'Conondale National Park – Booloumba Falls Hike','Eumundi Markets and Mount Eerwah Walking Trail',
+    'Noosa Heads Coastal Walk – Spring Views','Kondalilla Falls Wildflower Hike','Dreamworld (Sep)',
+    'Mooloolaba Beach – Swimming and Rock Pool Snorkelling','Double Island Point – 4WD Tour or Paddle Adventure',
+    'SEA LIFE (Sep)','Cootharaba to Kinaba Walk – Noosa Everglades','Mt Tibrogargan Climb or Summit Trail',
+    'Montville Visit and Baroon Pocket Dam','Dreamworld (Oct)','Peregian Beach – Coastal Tracks',
+    'Point Cartwright – Walks and Beach Relaxation','Sunshine Coast Hinterland Great Walk (Short Section)'
+  ]
 };
 var CAT_ART = {
   'On the water':'on_the_water', 'Trails and wilds':'trails_and_wilds', 'Wildlife':'wildlife',
   'Sky and night':'sky_and_night', 'Fire and camp':'fire_and_camp', 'Treasure hunting':'treasure_hunting',
-  'Big days out':'big_days_out', 'Home ports':'home_ports'
+  'Big days out':'big_days_out', 'Home ports':'home_ports', 'Dadrew\'s Almanac':'dadrews_almanac'
 };
 var CAT_POS = { 'Home ports':'center 72%' };
 var STONE_LINES = {

@@ -1,4 +1,4 @@
-# Midjourney Prompts: Adventure Board Category Cards (8)
+# Midjourney Prompts: Adventure Board Category Cards (9)
 
 *Standing rules applied: ultra realistic always, never painterly or cinematic fantasy, "magical" as the working adjective, nothing derelict. No people (the crew's own photos take over each adventure as it is completed). No text in image. Consistent golden light so the cards sit together on the board.*
 
@@ -30,6 +30,9 @@ Ultra realistic photograph, giant ferris wheel and rollercoaster silhouetted aga
 **8. Home ports**
 Ultra realistic photograph, rain streaking a window at dusk while inside a warm wooden table holds a board game mid-play, scattered playing cards, popcorn bowl and a flickering lantern, soft magical candlelight, cosy family room, inviting and snug, no people, no text --ar 4:3 --style raw
 
+**9. Dadrew's Almanac** *(added 4 Jul 2026, new category honouring the founding calendar)*
+Ultra realistic photograph, a weathered leather-bound year calendar lying open on a rustic wooden table, hand-marked with pins at Sunshine Coast landmarks, waterfalls, mountains and coastline, a soft golden ribbon of light linking the pins across the page, a brass ship's compass and coiled rope resting beside it, warm magical morning light through a nearby window, no people, no text --ar 4:3 --style raw
+
 ---
 
-**Consistency tip:** if the first card comes out well, use its seed or `--sref` with its URL on the remaining seven so the whole board shares one light.
+**Consistency tip:** if the first card comes out well, use its seed or `--sref` with its URL on the remaining eight so the whole board shares one light.

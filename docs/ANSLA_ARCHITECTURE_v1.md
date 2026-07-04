@@ -127,6 +127,7 @@ Standing rules apply: ultra realistic, never painterly or cinematic fantasy, "ma
 5. ~~Motif~~ **Locked:** the Ansla emblem is the first motif; the flag flies it by default. New motifs unlock through adventures
 6. ~~Adventure seed list~~ **Gathered:** 27 adventures in `docs/ADVENTURE_LIBRARY.md`, categorised with Stone pairings for later. (Correction: Currimundi paddle was concept sample copy, not a real adventure)
 7. ~~Shanty~~ **Locked:** the song develops as the crew writes it after each adventure, one earned line at a time, until the private shanty is deployed. Nothing pre-written, tune included
+8. ~~Hidden chorus~~ **Locked (4 Jul 2026):** one exception to "nothing pre-written" — a chorus, authored now, carrying Dadrew's founding credit (see `docs/ADVENTURE_LIBRARY.md`, Founding Almanac). Stays hidden/undeployed until the crew earns their first verse line, then deploys alongside it and recurs after every verse from then on. Verses stay fully crew-authored, one earned line at a time, exactly as locked above; only the chorus is fixed. Text: *"He mapped the year before we sailed her, so we'd never wonder where to go."* Build note: `rewards.shanty` needs a `chorus: { text, revealed }` alongside the existing `lines[]`, revealed flips true on first line earned.
 
 ## 10. Next step
 
