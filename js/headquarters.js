@@ -75,7 +75,7 @@ var shared = {
   hideSeek:{ active:false, soughtId:null, mode:'close', startedBy:null }
 };
 var positions = {};   /* member_id -> latest hs_positions row */
-var local = { settings:{ timeOverride:'auto' }, treasures:[], memberName:null, migrated:false };
+var local = { settings:{ timeOverride:'auto', sound:true }, treasures:[], memberName:null, migrated:false };
 
 function loadLocal(){
   try { var raw = localStorage.getItem(LOCAL_KEY); if (raw){ var l = JSON.parse(raw);
@@ -159,6 +159,34 @@ function toast(msg){
   var h = $('hint'); h.textContent = msg; h.classList.remove('gone');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function(){ h.classList.add('gone'); }, 5000);
+}
+
+/* ================= THE ISLAND'S VOICE (synthesised drums) ================= */
+var audioCtx = null;
+function primeAudio(){
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch(e){}
+}
+function drumHit(t, freq, vol){
+  var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(freq, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * 0.45), t + 0.22);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t + 0.32);
+}
+function playDrums(){
+  if (local.settings.sound === false || !audioCtx || audioCtx.state !== 'running') return;
+  var t = audioCtx.currentTime + 0.03;
+  drumHit(t,        110, 0.5);
+  drumHit(t + 0.22, 110, 0.5);
+  drumHit(t + 0.55,  82, 0.6);
+  drumHit(t + 0.77,  82, 0.6);
+  drumHit(t + 1.12,  62, 0.75);
 }
 
 /* ================= PANEL PLUMBING ================= */
@@ -290,7 +318,7 @@ function subscribe(){
     .on('postgres_changes', { event:'*', schema:'public', table:'flag' }, function(p){
       var was = shared.flag.raised;
       shared.flag = mapFlag(p.new); cacheSave(); reflectScene();
-      if (shared.flag.raised && !was){ proclaim('The Colours Are Raised'); boardPop(); }
+      if (shared.flag.raised && !was){ proclaim('The Colours Are Raised'); boardPop(); playDrums(); }
       if (!shared.flag.raised && was){ proclaim('The Colours Are Struck'); }
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'chaos_state' }, function(p){
@@ -303,7 +331,7 @@ function subscribe(){
       var was = shared.hideSeek.active;
       shared.hideSeek = { active:!!p.new.active, soughtId:p.new.sought_member_id, mode:p.new.mode || 'close', startedBy:p.new.started_by, startedAt:p.new.started_at };
       cacheSave(); reflectLantern(); geoSync();
-      if (shared.hideSeek.active && !was) proclaim('The Hunt Is On');
+      if (shared.hideSeek.active && !was){ proclaim('The Hunt Is On'); playDrums(); }
       if (!shared.hideSeek.active && was){ positions = {}; proclaim('The Lantern Is Doused'); }
       renderHuntIfOpen();
     })
@@ -389,7 +417,7 @@ function firstRun(){
 async function raiseColours(title, when){
   if (shared.flag.raised) return;
   shared.flag = { raised:true, adventure:title, when:when || '', raisedBy:myName(), joining:[myName()] };
-  reflectScene(); closeAll(); proclaim('The Colours Are Raised'); boardPop();
+  reflectScene(); closeAll(); proclaim('The Colours Are Raised'); boardPop(); playDrums();
   if (!online) return toast('Raised here only. The crew will see it when the island reconnects.');
   await sb.rpc('reset_chaos');
   var r = await sb.from('flag').update({
@@ -1087,7 +1115,7 @@ function renderHunt(){
         started_by:myName(), started_at:new Date().toISOString() }).eq('id', 1);
       if (r.error) return toast('The lantern guttered: ' + r.error.message);
       shared.hideSeek = { active:true, soughtId:who.id, mode:mode, startedBy:myName() };
-      reflectLantern(); geoSync(); renderHunt();
+      reflectLantern(); geoSync(); renderHunt(); playDrums();
       drumsBeat('hunt', who.name);
     };
   } else {
@@ -1157,6 +1185,9 @@ function openSettings(){
   var b = body('vSettings');
   b.innerHTML = '<div class="cat">Light on the island</div>' +
     '<p style="font-size:13.5px; margin:6px 0;">The island follows the real sky. Override it to preview:</p><div id="todRow"></div>' +
+    '<div class="cat">The island&rsquo;s voice</div>' +
+    '<button class="wbtn ' + (local.settings.sound === false ? 'ghost' : '') + '" id="sgSound">' +
+    (local.settings.sound === false ? 'The drums are muffled (tap to unmuffle)' : 'The drums may sound (tap to muffle)') + '</button>' +
     '<div class="cat">This device</div>' +
     '<p style="font-size:13.5px; margin:6px 0;">Signed on as ' + esc(myName()) + (online ? ' · sailing with the crew' : ' · beyond the reef (offline)') + '</p>' +
     '<button class="wbtn ghost" id="sgReset">This device forgets the island</button>' +
@@ -1172,6 +1203,12 @@ function openSettings(){
     row.appendChild(btn);
   });
   $('sgExport').onclick = exportChest;
+  $('sgSound').onclick = function(){
+    local.settings.sound = local.settings.sound === false ? true : false;
+    saveLocal();
+    if (local.settings.sound !== false){ primeAudio(); playDrums(); }
+    openSettings();
+  };
   var armed = false;
   $('sgReset').onclick = async function(){
     if (!armed){ armed = true; $('sgReset').textContent = 'Truly? This device will need the crew code again. The shared island is untouched. Tap again.'; return; }
@@ -1228,6 +1265,7 @@ async function init(){
     v.addEventListener('click', function(e){ if (e.target === v) v.classList.remove('open'); });
   });
   window.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAll(); });
+  window.addEventListener('pointerdown', primeAudio, { once:false });
   rolloIdleLoop();
   setTimeout(function(){ $('hint').classList.add('gone'); }, 6000);
   if ('serviceWorker' in navigator && window.isSecureContext){
