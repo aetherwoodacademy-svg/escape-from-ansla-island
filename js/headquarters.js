@@ -188,6 +188,46 @@ function playDrums(){
   drumHit(t + 0.77,  82, 0.6);
   drumHit(t + 1.12,  62, 0.75);
 }
+function squeakChirp(t, f0, f1, dur, vol){
+  var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function playSqueak(){
+  if (local.settings.sound === false || !audioCtx || audioCtx.state !== 'running') return;
+  var t = audioCtx.currentTime + 0.02;
+  squeakChirp(t,        1500, 950, 0.13, 0.22);
+  squeakChirp(t + 0.19, 1750, 1050, 0.16, 0.26);
+}
+var lastCueTier = 99;
+function cueTier(km){
+  if (km == null) return 99;
+  if (km <= 0.05) return 0;
+  if (km <= 0.15) return 1;
+  if (km <= 0.4) return 2;
+  return 3;
+}
+function checkSqueak(){
+  if (!shared.hideSeek.active || !me.id || shared.hideSeek.soughtId !== me.id){ lastCueTier = 99; return; }
+  var nearest = null, myPos = positions[me.id];
+  members.forEach(function(m){
+    if (m.id === me.id) return;
+    var p = positions[m.id];
+    if (p && myPos && p.lat != null && myPos.lat != null){
+      var d = haversineKm({ lat:myPos.lat, lng:myPos.lng }, { lat:p.lat, lng:p.lng });
+      if (nearest === null || d < nearest) nearest = d;
+    }
+  });
+  var tier = cueTier(nearest);
+  if (tier < lastCueTier && tier <= 1) playSqueak();
+  lastCueTier = tier;
+}
 
 /* ================= PANEL PLUMBING ================= */
 function openV(id){ $(id).classList.add('open'); }
@@ -337,6 +377,7 @@ function subscribe(){
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'hs_positions' }, function(p){
       if (p.new && p.new.member_id) positions[p.new.member_id] = p.new;
+      checkSqueak();
       renderHuntIfOpen();
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'horizon' }, function(){ fetchHorizon().then(function(){ cacheSave(); reflectScene(); }); })
