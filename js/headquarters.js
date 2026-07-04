@@ -379,7 +379,7 @@ function subscribe(){
       shared.hideSeek = { active:!!p.new.active, soughtId:p.new.sought_member_id, mode:p.new.mode || 'close', startedBy:p.new.started_by, startedAt:p.new.started_at };
       cacheSave(); reflectLantern(); geoSync();
       if (shared.hideSeek.active && !was){ proclaim('The Hunt Is On'); playDrums(); }
-      if (!shared.hideSeek.active && was){ positions = {}; proclaim('The Lantern Is Doused'); }
+      if (!shared.hideSeek.active && was){ positions = {}; mapMode = false; destroyHuntMap(); proclaim('The Lantern Is Doused'); }
       renderHuntIfOpen();
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'hs_positions' }, function(p){
@@ -1260,6 +1260,30 @@ function cueFor(km){
   for (var i = 0; i < HUNT_CUES.length; i++){ if (km <= HUNT_CUES[i][0]) return HUNT_CUES[i][1]; }
   return HUNT_CUES[HUNT_CUES.length - 1][1];
 }
+var mapMode = false, huntMapObj = null, huntMarkers = {};
+function destroyHuntMap(){
+  if (huntMapObj){ try { huntMapObj.remove(); } catch(e){} }
+  huntMapObj = null; huntMarkers = {};
+}
+function updateHuntMarkers(){
+  if (!huntMapObj || !window.L) return;
+  var pts = [];
+  members.forEach(function(m){
+    var p = positions[m.id];
+    if (!p || p.lat == null) return;
+    if (!huntMarkers[m.id]){
+      var isSought = m.id === shared.hideSeek.soughtId;
+      var icon = window.L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
+        html:'<div class="mapDot' + (isSought ? ' mapSought' : '') + '">' + esc(m.name.charAt(0)) + '</div>' });
+      huntMarkers[m.id] = window.L.marker([p.lat, p.lng], { icon:icon }).addTo(huntMapObj).bindTooltip(m.name);
+    } else huntMarkers[m.id].setLatLng([p.lat, p.lng]);
+    pts.push([p.lat, p.lng]);
+  });
+  if (pts.length && !huntMapObj._anslaFit){
+    huntMapObj.fitBounds(pts, { padding:[40, 40], maxZoom:14 });
+    huntMapObj._anslaFit = true;
+  }
+}
 function renderHuntIfOpen(){ var v = $('vHunt'); if (v && v.classList.contains('open')) renderHunt(); }
 function openHunt(){ renderHunt(); openV('vHunt'); }
 function renderHunt(){
@@ -1301,12 +1325,19 @@ function renderHunt(){
       drumsBeat('hunt', who.name);
     };
   } else {
+    if (mapMode && huntMapObj && $('huntMap')){ updateHuntMarkers(); return; }
     var sought = members.filter(function(m){ return m.id === shared.hideSeek.soughtId; })[0];
     var soughtName = sought ? sought.name : 'someone';
     var iAmSought = me.id && shared.hideSeek.soughtId === me.id;
     var html = '<p style="font-size:12.5px; letter-spacing:.14em; text-transform:uppercase; color:#7a5a32;">' +
       (shared.hideSeek.mode === 'long' ? 'A long chase' : 'A close hunt') + ' &middot; lit by ' + esc(shared.hideSeek.startedBy || '') + '</p>';
-    if (iAmSought){
+    if (mapMode){
+      html += '<div id="huntMap"></div>' +
+        '<p class="sub" style="text-align:center;">' + esc(soughtName) + ' has gone to ground. The chart shows every soul the island can sense.</p>' +
+        (iAmSought ? '<button class="wbtn ghost" id="huntCaught" style="margin-top:10px;">They found me</button>'
+                   : '<button class="wbtn" id="huntFound" style="margin-top:10px;">Found them!</button>') +
+        '<button class="wbtn ghost" id="huntNeedleBtn" style="margin-top:10px;">Roll up the chart</button>';
+    } else if (iAmSought){
       var nearest = null, myPos = positions[me.id];
       members.forEach(function(m){
         if (m.id === me.id) return;
@@ -1320,7 +1351,8 @@ function renderHunt(){
         '<div class="notice' + (nearest !== null && nearest < 0.15 ? ' eekPulse' : '') + '" style="font-size:16px;">' +
         esc(nearest === null ? 'The island is quiet. For now.' : cueFor(nearest)) + '</div>' +
         (nearest !== null ? '<p style="font-size:12.5px; color:#8a765a; font-style:italic;">Nearest hunter: ' + fmtDist(nearest) + '</p>' : '') +
-        '<button class="wbtn ghost" id="huntCaught" style="margin-top:10px;">They found me</button>';
+        '<button class="wbtn ghost" id="huntCaught" style="margin-top:10px;">They found me</button>' +
+        '<button class="wbtn ghost" id="huntMapBtn" style="margin-top:10px;">Unroll the chart</button>';
     } else {
       var sp = shared.hideSeek.soughtId ? positions[shared.hideSeek.soughtId] : null;
       var mp = me.id ? positions[me.id] : null;
@@ -1339,10 +1371,20 @@ function renderHunt(){
           ? 'The island is listening for positions&hellip; move about and give it a moment.'
           : 'This shore cannot sense positions; the deployed island carries the tracking magic. Hunt by wit for now.') + '</div>';
       }
-      html += '<button class="wbtn" id="huntFound" style="margin-top:10px;">Found them!</button>';
+      html += '<button class="wbtn" id="huntFound" style="margin-top:10px;">Found them!</button>' +
+        '<button class="wbtn ghost" id="huntMapBtn" style="margin-top:10px;">Unroll the chart</button>';
     }
     html += '<button class="wbtn ghost" id="huntDouse" style="margin-top:10px;">Douse the lantern</button>';
     b.innerHTML = html;
+    if ($('huntMapBtn')) $('huntMapBtn').onclick = function(){ mapMode = true; renderHunt(); };
+    if ($('huntNeedleBtn')) $('huntNeedleBtn').onclick = function(){ mapMode = false; destroyHuntMap(); renderHunt(); };
+    if (mapMode && window.L && $('huntMap') && !huntMapObj){
+      huntMapObj = window.L.map('huntMap');
+      window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19,
+        attribution:'&copy; OpenStreetMap' }).addTo(huntMapObj);
+      huntMapObj.setView([HOME_SHORE.lat, HOME_SHORE.lng], 10);
+      updateHuntMarkers();
+    }
     async function endHunt(foundBy){
       if (!online) return toast('The lantern needs the island connected.');
       var jobs = [ sb.from('hide_seek').update({ active:false, sought_member_id:null, started_by:null }).eq('id', 1) ];
@@ -1352,6 +1394,7 @@ function renderHunt(){
       await Promise.all(jobs);
       shared.hideSeek = { active:false, soughtId:null, mode:'close', startedBy:null };
       positions = {};
+      mapMode = false; destroyHuntMap();
       reflectLantern(); geoSync(); renderHunt();
     }
     if ($('huntFound')) $('huntFound').onclick = function(){ endHunt(myName()); };
