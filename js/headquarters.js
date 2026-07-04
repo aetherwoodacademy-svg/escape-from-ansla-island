@@ -47,6 +47,44 @@ var CAT_ART = {
   'Big days out':'big_days_out', 'Home ports':'home_ports', 'Dadrew\'s Almanac':'dadrews_almanac'
 };
 var CAT_POS = { 'Home ports':'center 72%' };
+/* Dadrew's original week-of-year for each Almanac entry (from the founding calendar), used only to find "this week's" pick */
+var ALMANAC_DATES = {
+  'Mt Coolum New Year\'s Hike and Beach Picnic':[11,29], 'SEA LIFE (Nov)':[11,22], 'Dreamworld (Jan)':[1,5],
+  'Gardners Falls – Maleny, Swimming Hole':[1,12], 'Buderim Forest Park – Waterfall and Shaded Trails':[1,19],
+  'Kondalilla Falls – Full Circuit Hike':[1,26], 'Noosa National Park – Coastal Walks and Secluded Beaches':[2,2],
+  'Mapleton Falls and National Park':[2,9], 'Mt Coolum Sunrise Climb and Coolum Beach':[2,16],
+  'Wappa Falls – Swimming and Picnic':[2,23],
+  'SEA LIFE (Mar)':[3,1], 'Mary Cairncross Scenic Reserve – Glass House Mountain Views':[3,8],
+  'Baroon Pocket Dam – Walk or Paddleboarding':[3,15], 'Mt Ninderry Hike – Hinterland Views':[3,22],
+  'Mt Ngungun Climb – Family-Friendly Adventure':[3,29], 'Glass House Mountains Lookout Circuit':[4,5],
+  'Dreamworld (Apr)':[4,12], 'Eumundi Conservation Park Walk and Markets':[4,19],
+  'Bribie Island – Coastal Walks and Birdwatching':[4,26], 'Noosa Everglades Eco Tour – Tranquil Waterways':[5,3],
+  'SEA LIFE (May)':[5,10], 'Tibrogargan Circuit – Glass House Mountains':[5,17], 'Mt Beerburrum Climb and Picnic':[5,24],
+  'Mt Tinbeerwah Sunset Hike':[5,31], 'Boreen Point Foreshore – Relaxing Day':[6,7], 'Dreamworld (Jun)':[6,14],
+  'Caloundra Coastal Pathway Walk to Moffat Beach':[6,21], 'Noosa Botanic Gardens – Lakeside Afternoon':[6,28],
+  'Mt Cooroora (Pomona) Hike':[7,5], 'Glass House Mountains Interpretive Centre and Trails':[7,12],
+  'Mt Coochin Climb – Lesser-Known Adventure':[7,19], 'SEA LIFE (Jul)':[7,26], 'Rainbow Beach – Coloured Sands and Walks':[8,2],
+  'Conondale National Park – Booloumba Falls Hike':[8,9], 'Eumundi Markets and Mount Eerwah Walking Trail':[8,16],
+  'Noosa Heads Coastal Walk – Spring Views':[8,23], 'Kondalilla Falls Wildflower Hike':[8,30], 'Dreamworld (Sep)':[9,6],
+  'Mooloolaba Beach – Swimming and Rock Pool Snorkelling':[9,13], 'Double Island Point – 4WD Tour or Paddle Adventure':[9,20],
+  'SEA LIFE (Sep)':[9,27], 'Cootharaba to Kinaba Walk – Noosa Everglades':[10,4], 'Mt Tibrogargan Climb or Summit Trail':[10,11],
+  'Montville Visit and Baroon Pocket Dam':[10,18], 'Dreamworld (Oct)':[10,25], 'Peregian Beach – Coastal Tracks':[11,1],
+  'Point Cartwright – Walks and Beach Relaxation':[11,8], 'Sunshine Coast Hinterland Great Walk (Short Section)':[11,15]
+};
+function dayOfYearMD(m, d){
+  var cum = [0,31,59,90,120,151,181,212,243,273,304,334];
+  return cum[m - 1] + d;
+}
+function almanacFeatured(){
+  var now = new Date(), todayDoY = dayOfYearMD(now.getMonth() + 1, now.getDate());
+  var best = null, bestDist = 999;
+  Object.keys(ALMANAC_DATES).forEach(function(title){
+    var md = ALMANAC_DATES[title], eDoY = dayOfYearMD(md[0], md[1]);
+    var dist = Math.abs(eDoY - todayDoY); dist = Math.min(dist, 365 - dist);
+    if (dist < bestDist){ bestDist = dist; best = title; }
+  });
+  return best;
+}
 var STONE_LINES = {
   dawn: ['The island wakes gold and quiet. First light belongs to the brave.',
          'The tide has turned in the night. New sand, new stories.',
@@ -556,7 +594,17 @@ function openBoard(){
   Object.keys(LIBRARY).forEach(function(cat){
     if (CAT_ART[cat]) html += '<div class="catCard" style="background-image:url(\'art/board/' + CAT_ART[cat] + '.jpg\')' + (CAT_POS[cat] ? '; background-position:' + CAT_POS[cat] : '') + '"><span>' + esc(cat) + '</span></div>';
     else html += '<div class="cat">' + esc(cat) + '</div>';
-    LIBRARY[cat].forEach(function(a){ html += '<span class="adv" data-a="' + esc(a) + '">' + esc(a) + '</span>'; });
+    if (cat === 'Dadrew\'s Almanac'){
+      var feat = almanacFeatured();
+      html += '<div class="notice" style="margin:2px 0 8px;">This week from the Almanac:</div>' +
+        '<span class="adv" data-a="' + esc(feat) + '">' + esc(feat) + '</span>' +
+        '<div style="margin:10px 0 2px;"><span id="almToggle" style="cursor:pointer; font-size:13px; letter-spacing:.04em; color:#7a5a32; text-decoration:underline;">Browse the full almanac (48) &#9662;</span></div>' +
+        '<div id="almFull" style="display:none; margin-top:6px;">';
+      LIBRARY[cat].forEach(function(a){ if (a !== feat) html += '<span class="adv" data-a="' + esc(a) + '">' + esc(a) + '</span>'; });
+      html += '</div>';
+    } else {
+      LIBRARY[cat].forEach(function(a){ html += '<span class="adv" data-a="' + esc(a) + '">' + esc(a) + '</span>'; });
+    }
   });
   html += '<div id="raiseForm" style="display:none; margin-top:16px;">' +
     '<div class="advCard"><b id="rfName"></b></div>' +
@@ -595,6 +643,11 @@ function openBoard(){
       $('raiseForm').scrollIntoView({ behavior:'smooth', block:'nearest' });
     };
   });
+  if ($('almToggle')) $('almToggle').onclick = function(){
+    var el = $('almFull'), open = el.style.display !== 'none';
+    el.style.display = open ? 'none' : 'block';
+    $('almToggle').innerHTML = open ? 'Browse the full almanac (48) &#9662;' : 'Hide the full almanac &#9652;';
+  };
   if ($('rfGo')) $('rfGo').onclick = function(){ if (chosen) raiseColours(chosen, whenPick); };
   $('rfChart').onclick = function(){
     if (!chosen) return;

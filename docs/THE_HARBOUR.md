@@ -18,6 +18,8 @@
 ### The Island Stone's senses (API voyage)
 Weather, warnings, rainfall, radar, tides, moon, stars, rivers, wildlife, fishing guides, whale season, markets, UV, night sky events, local events. The Stone interprets nature; it does not display data.
 
+**Local events, investigated 4 Jul 2026:** checked whether the Stone could pull from Sunshine Coast Council's events calendar (`events.sunshinecoast.qld.gov.au`) the same way it pulls weather from Open-Meteo. Confirmed via live browser inspection (not guessed): the council's own site is just a link-out page; the real calendar is a separate platform ("Everi", via FactFour-branded image buckets) that is fully server-rendered HTML with no RSS/iCal/JSON — the search form does a plain page load with filters baked into the URL path, no XHR to intercept. Unlike Open-Meteo, there is no cross-origin-friendly public API to call from the browser. The only real route in would be a server-side scraper (a Supabase Edge Function parsing the HTML, same shape as `sound-the-drums`), which carries ongoing maintenance risk (breaks whenever the council redesigns the page) rather than a stable API contract. Ange still wants this (important to know what's happening locally) and will look into it herself; parked here rather than built, since it's a different order of engineering effort to the rest of the Stone.
+
 ### Wildlife intelligence
 Its own line item from the discovery phase: the island knowing what creatures are about (whales, birds, seasonal visitors) and whispering it through the Stone.
 
