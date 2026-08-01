@@ -1,0 +1,68 @@
+name: Keep Supabase Alive
+
+# WHAT THIS DOES
+# Escape from Ansla Island uses a free Supabase project. Supabase pauses
+# free projects after 7 days with no database activity. This workflow pings
+# the database on a schedule so it never sleeps, even when nobody in the
+# family has opened the app for a while.
+#
+# It also writes a small heartbeat file every ~40 days. That is only there
+# to stop GitHub from auto-disabling this scheduled workflow after 60 days
+# of repo inactivity — so this keeps running forever with no attention.
+#
+# Set up 25 July 2026. Safe to delete this file if you ever go to Supabase Pro.
+
+on:
+  schedule:
+    - cron: '0 7 */2 * *'   # every 2 days at 07:00 UTC (17:00 Brisbane)
+  workflow_dispatch:         # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write            # needed only for the occasional heartbeat commit
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ping the Ansla Island database
+        env:
+          SUPABASE_URL: https://snnbgttfavruslntoosu.supabase.co
+          SUPABASE_ANON_KEY: sb_publishable_DXRoK4gaSjx3fwQ78ltVMA_OB26BGqM
+        run: |
+          code=$(curl -s -o /tmp/out.txt -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/crew_members?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "HTTP $code"
+          cat /tmp/out.txt || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Keep-alive ping failed (HTTP $code). The project may need attention."
+            exit 1
+          fi
+          echo "Keep-alive ping OK — database is awake."
+
+      - name: Heartbeat (keeps this workflow from being auto-disabled)
+        run: |
+          mkdir -p .keepalive
+          stamp=.keepalive/last-heartbeat.txt
+          now=$(date -u +%s)
+          need=1
+          if [ -f "$stamp" ]; then
+            last=$(date -u -d "$(cat "$stamp")" +%s 2>/dev/null || echo 0)
+            # only commit if more than 40 days since the last heartbeat
+            if [ $((now - last)) -lt 3456000 ]; then need=0; fi
+          fi
+          if [ "$need" = "1" ]; then
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > "$stamp"
+            git config user.name "ansla keep-alive"
+            git config user.email "actions@users.noreply.github.com"
+            git add "$stamp"
+            git commit -m "keep-alive heartbeat [skip ci]"
+            git push
+          else
+            echo "Recent heartbeat present; no commit needed."
+          fi
