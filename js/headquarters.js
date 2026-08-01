@@ -161,6 +161,8 @@ function cachePaint(){
 function $(id){ return document.getElementById(id); }
 function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 function myName(){ return me.name || local.memberName || 'Captain'; }
+function daysAgo(iso){ if (!iso) return 0; return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); }
+function isKeeper(){ return myName() === 'Mumgela'; }
 
 /* ================= TIME OF DAY ================= */
 function timeState(){
@@ -397,7 +399,7 @@ async function whoAmI(){
   return false;
 }
 async function fetchFlag(){ var r = await sb.from('flag').select('*').eq('id',1).single(); if (r.data) shared.flag = mapFlag(r.data); }
-async function fetchHorizon(){ var r = await sb.from('horizon').select('*').order('charted_at'); if (r.data) shared.horizon = r.data.map(function(h){ return { id:h.id, title:h.title, when:h.when_label, chartedBy:h.charted_by }; }); }
+async function fetchHorizon(){ var r = await sb.from('horizon').select('*').order('charted_at'); if (r.data) shared.horizon = r.data.map(function(h){ return { id:h.id, title:h.title, when:h.when_label, chartedBy:h.charted_by, chartedAt:h.charted_at }; }); }
 async function fetchIdeas(){ var r = await sb.from('ideas').select('*').order('planted_at'); if (r.data) shared.ideas = r.data.map(function(i){ return { id:i.id, text:i.idea, plantedBy:i.planted_by, plantedAt:i.planted_at }; }); }
 async function fetchAdventures(){ var r = await sb.from('adventures').select('*').order('completed_at'); if (r.data) shared.adventures = r.data.map(function(a){ return { title:a.title, when:a.when_label, joining:a.joining||[], chaos:a.chaos, chaosChampion:a.chaos_champion, completedAt:a.completed_at }; }); }
 async function fetchChronicle(){ var r = await sb.from('chronicle').select('*').order('created_at'); if (r.data) shared.chronicle = r.data.map(function(c){ return { entry:c.entry, author:c.author, date:c.created_at }; }); }
@@ -657,6 +659,19 @@ function openBoard(){
   $('rfNo').onclick = function(){ chosen = null; $('raiseForm').style.display = 'none'; };
   openV('vBoard');
 }
+async function standDownFlag(){
+  var hadChaos = shared.chaos.deployed;
+  shared.flag = { raised:false, adventure:null, when:null, raisedBy:null, joining:[] };
+  shared.chaos = { deployed:false, deployedBy:null };
+  reflectScene();
+  toast('Stood down. Nothing logged.');
+  if (!online) return;
+  var jobs = [
+    sb.from('flag').update({ raised:false, adventure:null, when_label:null, raised_by:null, joining:[], raised_at:null, updated_at:new Date().toISOString() }).eq('id', 1)
+  ];
+  if (hadChaos) jobs.push(sb.rpc('reset_chaos'));
+  await Promise.all(jobs);
+}
 
 /* ================= FLAG ================= */
 function openFlag(){
@@ -689,18 +704,8 @@ function openFlag(){
         $('fStandDown').textContent = 'Truly? Nothing will be logged, no chronicle, no shanty line. Tap again.';
         return;
       }
-      var hadChaos = shared.chaos.deployed;
-      shared.flag = { raised:false, adventure:null, when:null, raisedBy:null, joining:[] };
-      shared.chaos = { deployed:false, deployedBy:null };
-      reflectScene();
       closeV('vFlag');
-      toast('Stood down. Nothing logged.');
-      if (!online) return;
-      var jobs = [
-        sb.from('flag').update({ raised:false, adventure:null, when_label:null, raised_by:null, joining:[], raised_at:null, updated_at:new Date().toISOString() }).eq('id', 1)
-      ];
-      if (hadChaos) jobs.push(sb.rpc('reset_chaos'));
-      await Promise.all(jobs);
+      await standDownFlag();
     };
     $('fStrike').onclick = function(){
       $('fStrike').style.display = 'none';
@@ -1514,6 +1519,65 @@ function renderHunt(){
   }
 }
 
+/* ================= KEEPER'S LOG (Mumgela only) ================= */
+var AGED_DAYS = 7;
+function openKeeper(){
+  var b = body('vKeeper');
+  if (!isKeeper()){
+    b.innerHTML = '<div class="notice">This ledger isn\'t yours to read.</div>';
+    openV('vKeeper');
+    return;
+  }
+  var html = '<p style="font-size:13.5px; color:#7a5a32; margin:2px 0 10px;">Anything sitting quiet ' + AGED_DAYS + '+ days shows here. Nothing is deleted until you say so.</p>';
+  var agedIdeas = shared.ideas.filter(function(i){ return daysAgo(i.plantedAt) >= AGED_DAYS; });
+  var agedFlag = (shared.flag.raised && daysAgo(shared.flag.raisedAt) >= AGED_DAYS) ? shared.flag : null;
+  var agedHorizon = shared.horizon.filter(function(h){ return daysAgo(h.chartedAt) >= AGED_DAYS; });
+
+  html += '<div class="cat">Raised colours</div>';
+  if (!agedFlag) html += '<div class="notice">Nothing stale here.</div>';
+  else html += '<div class="advCard"><b>' + esc(agedFlag.adventure) + '</b><br>' +
+    '<span style="font-size:12px; color:#8a765a; font-style:italic;">raised by ' + esc(agedFlag.raisedBy) + ' &middot; ' + daysAgo(agedFlag.raisedAt) + ' days ago</span><br>' +
+    '<button class="wbtn ghost keepStand" style="margin-top:8px; font-size:13px;">Stand it down</button></div>';
+
+  html += '<div class="cat">Planted ideas</div>';
+  if (!agedIdeas.length) html += '<div class="notice">Nothing stale here.</div>';
+  agedIdeas.forEach(function(idea){
+    html += '<div class="advCard"><b style="font-size:15px;">' + esc(idea.text) + '</b><br>' +
+      '<span style="font-size:12px; color:#8a765a; font-style:italic;">planted by ' + esc(idea.plantedBy) + ' &middot; ' + daysAgo(idea.plantedAt) + ' days ago</span><br>' +
+      '<button class="wbtn ghost keepIdea" data-id="' + esc(idea.id) + '" style="margin-top:8px; font-size:13px;">Pull it up</button></div>';
+  });
+
+  html += '<div class="cat">On the horizon</div>';
+  if (!agedHorizon.length) html += '<div class="notice">Nothing stale here.</div>';
+  agedHorizon.forEach(function(hz){
+    html += '<div class="advCard"><b style="font-size:15px;">' + esc(hz.title) + '</b><br>' +
+      '<span style="font-size:12px; color:#8a765a; font-style:italic;">charted by ' + esc(hz.chartedBy) + ' &middot; ' + daysAgo(hz.chartedAt) + ' days ago</span><br>' +
+      '<button class="wbtn ghost keepHorizon" data-id="' + esc(hz.id) + '" style="margin-top:8px; font-size:13px;">Drop it</button></div>';
+  });
+
+  b.innerHTML = html;
+  b.querySelectorAll('.keepStand').forEach(function(el){
+    el.onclick = async function(){ await standDownFlag(); openKeeper(); };
+  });
+  b.querySelectorAll('.keepIdea').forEach(function(el){
+    el.onclick = async function(){
+      var id = el.getAttribute('data-id');
+      shared.ideas = shared.ideas.filter(function(i){ return String(i.id) !== id; });
+      openKeeper();
+      if (online) await sb.from('ideas').delete().eq('id', id);
+    };
+  });
+  b.querySelectorAll('.keepHorizon').forEach(function(el){
+    el.onclick = async function(){
+      var id = el.getAttribute('data-id');
+      shared.horizon = shared.horizon.filter(function(h){ return String(h.id) !== id; });
+      reflectScene(); openKeeper();
+      if (online) await sb.from('horizon').delete().eq('id', id);
+    };
+  });
+  openV('vKeeper');
+}
+
 /* ================= SETTINGS ================= */
 function openSettings(){
   var b = body('vSettings');
@@ -1525,6 +1589,7 @@ function openSettings(){
     '<div class="cat">This device</div>' +
     '<p style="font-size:13.5px; margin:6px 0;">Signed on as ' + esc(myName()) + (online ? ' · sailing with the crew' : ' · beyond the reef (offline)') + '</p>' +
     '<button class="wbtn ghost" id="sgReset">This device forgets the island</button>' +
+    (isKeeper() ? '<div class="cat">The Keeper\'s Log</div><button class="wbtn ghost" id="sgKeeper">Review aged submissions</button>' : '') +
     '<div class="cat">The archive</div>' +
     '<button class="wbtn ghost" id="sgExport">Export the chest (keep it forever)</button>' +
     '<p class="sub" style="margin-top:14px;">Escape from Ansla Island &middot; Voyage II &middot; one island, shared by the whole crew.</p>';
@@ -1537,6 +1602,7 @@ function openSettings(){
     row.appendChild(btn);
   });
   $('sgExport').onclick = exportChest;
+  if ($('sgKeeper')) $('sgKeeper').onclick = openKeeper;
   $('sgSound').onclick = function(){
     local.settings.sound = local.settings.sound === false ? true : false;
     saveLocal();
